@@ -4,6 +4,7 @@ import * as THREE from './three.module.min.js';
 // =====================================================================
 // Konstanten / Tuning
 // =====================================================================
+const VERSION = 2;
 const A = 6.0;                 // halbe Arenagroesse (12 x 12 m)
 const MOVE_SPEED = 3.0;
 const DASH_DIST = 3.2, DASH_TIME = 0.12, DASH_CD = 0.9;
@@ -162,6 +163,7 @@ const sfx = {
   bounce: () => tone('triangle', 300, 200, 0.06, 0.15),
   shield: () => { tone('sine', 400, 1200, 0.25, 0.2); },
   teleport: () => { tone('sine', 200, 2000, 0.25, 0.2); noise(0.25, 'bandpass', 3000, 400, 0.2); },
+  incoming: (v) => noise(0.35, 'bandpass', 3000, 700, 0.35 * v),
   win: () => [523, 659, 784, 1046, 784, 1046].forEach((f, i) => tone('square', f, f, 0.16, 0.1, i * 0.13)),
 };
 
@@ -204,6 +206,9 @@ function showHud(text, sub = '', color = '#fff', dur = 1.6) {
   hudTex.t.needsUpdate = true; hud.visible = true; hudTimer = dur;
 }
 hud.visible = false;
+const flash = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 12), new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false }));
+flash.renderOrder = 998; flash.visible = false; camera.add(flash);
+let flashT = 0;
 
 const wristTex = canvasTex(512, 200);
 const wrist = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.0625), new THREE.MeshBasicMaterial({ map: wristTex.t, transparent: true }));
@@ -314,22 +319,41 @@ function haptic(h, intensity, ms) {
   try { const a = h.src && h.src.gamepad && h.src.gamepad.hapticActuators && h.src.gamepad.hapticActuators[0]; if (a) a.pulse(intensity, ms); } catch (e) {}
 }
 
+// ---------- Bodenschatten + Flugspur (Lesbarkeit in VR) ----------
+const shadowGeo = new THREE.CircleGeometry(0.16, 16);
+function makeShadow() {
+  const m = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.visible = false; scene.add(m); return m;
+}
+function placeShadow(sh, pos, visible) {
+  sh.visible = visible; if (!visible) return;
+  sh.position.set(pos.x, 0.012, pos.z);
+  const k = clamp(1 - pos.y / 3, 0.3, 1); sh.scale.setScalar(0.7 + (1 - k)); sh.material.opacity = 0.45 * k;
+}
+const trail = [];
+const trailGeo = new THREE.SphereGeometry(0.045, 6, 4);
+const trailMats = {};
+function trailMat(hex) { return trailMats[hex] || (trailMats[hex] = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.55, depthWrite: false })); }
+function addTrail(pos, hex) {
+  const m = new THREE.Mesh(trailGeo, trailMat(hex)); m.position.copy(pos); m.userData.life = 0.22; scene.add(m); trail.push(m);
+}
+
 // ---------- Eigene Bumerangs ----------
 let boomSeq = 1;
 const myBooms = [];
 function newBoom(extra = false) {
   const b = { id: (mySlot + 1) * 100000 + boomSeq++, mesh: makeBoomerangMesh(COLORS[Math.max(0, mySlot)]), state: 'held', hand: 'right',
-    pos: V(), vel: V(), phase: 'out', traveled: 0, range: 8, speed: 12, tBack: 0, extra, hit: false, exploded: false, respawn: 0 };
+    pos: V(), vel: V(), shadow: makeShadow(), trailT: 0, phase: 'out', traveled: 0, range: 8, speed: 12, tBack: 0, extra, hit: false, exploded: false, respawn: 0 };
   scene.add(b.mesh); myBooms.push(b); setBoomPowerLook(b.mesh, myPower, Math.max(0, mySlot));
   return b;
 }
 let mainBoom = null;
 function resetMyBooms() {
-  for (const b of myBooms) scene.remove(b.mesh);
+  for (const b of myBooms) { scene.remove(b.mesh); scene.remove(b.shadow); }
   myBooms.length = 0;
   mainBoom = newBoom(false);
 }
-function removeBoom(b) { scene.remove(b.mesh); const i = myBooms.indexOf(b); if (i >= 0) myBooms.splice(i, 1); }
+function removeBoom(b) { scene.remove(b.mesh); scene.remove(b.shadow); const i = myBooms.indexOf(b); if (i >= 0) myBooms.splice(i, 1); }
 
 // ---------- Gegner ----------
 const opp = { av: null, has: false, alive: true, shield: false, power: null, head: V(), lh: V(), rh: V(), headQ: new THREE.Quaternion(),
@@ -575,6 +599,7 @@ function handle(m) {
     case 'kill': {
       sfx.kill();
       if (m.victim === mySlot) {
+        flashT = 0.9; flash.visible = true;
         alive = false; canMove = false;
         for (const b of myBooms) b.mesh.visible = false;
         showHud(m.cause === 'boom' && m.by === mySlot ? 'EIGENTOR!' : 'GETROFFEN!', '', '#ff4d4d', 2.2);
@@ -599,10 +624,17 @@ function handle(m) {
       setStatus(NAMES[m.winner] + ' gewinnt das Match!');
       if (m.winner === mySlot) { sfx.win(); for (let i = 0; i < 5; i++) setTimeout(() => { camera.getWorldPosition(tmp2); burst(tmp2.add(tmp3.set(Math.random() * 4 - 2, 1.5, Math.random() * 4 - 2)), [0xff8a1f, 0x2ec8ff, 0xffe14a, 0xff4dd2][i % 4], 40, 5); }, i * 300); }
       break;
-    case 's': applyRemoteState(m); break;
+    case 's': checkVersion(m.v); applyRemoteState(m); break;
     case 'fx': onFx(m); break;
   }
   drawBoard();
+}
+let versionWarned = false;
+function checkVersion(v) {
+  if (v === VERSION || versionWarned) return;
+  versionWarned = true;
+  showHud('ANDERE VERSION', 'Beide Quests: Seite neu laden', '#ff6060', 8);
+  setStatus('Versionen unterschiedlich – auf beiden Quests neu laden');
 }
 function powerHint(t) {
   return { multi: 'Wirf 3 auf einmal', explosive: 'Explodiert beim Aufprall – Abstand halten!', shield: 'Hält einen Treffer aus', teleport: 'Trigger während Flug = hinbeamen' }[t];
@@ -633,11 +665,11 @@ function applyRemoteState(m) {
   for (const [id, x, y, z, fly, pw] of m.b) {
     seen.add(id);
     let rb = opp.booms.get(id);
-    if (!rb) { rb = { mesh: makeBoomerangMesh(COLORS[oppSlot()]), pos: V(), tgt: V(), fly: 0, pw: null, parryCd: 0 }; scene.add(rb.mesh); opp.booms.set(id, rb); rb.pos.set(x, y, z); }
+    if (!rb) { rb = { mesh: makeBoomerangMesh(COLORS[oppSlot()]), shadow: makeShadow(), pos: V(), tgt: V(), fly: 0, pw: null, parryCd: 0, trailT: 0, warned: false }; scene.add(rb.mesh); opp.booms.set(id, rb); rb.pos.set(x, y, z); }
     rb.tgt.set(x, y, z); rb.fly = fly;
     if (rb.pw !== pw) { rb.pw = pw; setBoomPowerLook(rb.mesh, pw || null, oppSlot()); }
   }
-  for (const [id, rb] of opp.booms) if (!seen.has(id)) { scene.remove(rb.mesh); opp.booms.delete(id); }
+  for (const [id, rb] of opp.booms) if (!seen.has(id)) { scene.remove(rb.mesh); scene.remove(rb.shadow); opp.booms.delete(id); }
   if (opp.av) opp.av.g.visible = opp.alive && m.a === 1 && mode !== 'practice';
 }
 
@@ -866,6 +898,14 @@ function update(dt, t) {
       rb.mesh.visible = opp.alive && mode !== 'practice';
       if (rb.fly) rb.mesh.rotation.set(0, rb.mesh.rotation.y + 25 * dt, 0); else rb.mesh.rotation.set(-Math.PI / 2, 0, 0);
       rb.parryCd -= dt;
+      const vis = rb.mesh.visible && rb.fly === 1;
+      placeShadow(rb.shadow, rb.pos, vis);
+      if (vis) {
+        rb.trailT -= dt; if (rb.trailT <= 0) { rb.trailT = 0.02; addTrail(rb.pos, rb.mesh.userData.mat.color.getHex()); }
+        const d = Math.hypot(rb.pos.x - myHead.x, rb.pos.z - myHead.z);
+        if (d < 2.6 && !rb.warned && alive) { rb.warned = true; sfx.incoming(clamp(1 - d / 2.6, 0.25, 1)); haptic(hands.left, 0.25, 40); haptic(hands.right, 0.25, 40); }
+        if (d > 3.5) rb.warned = false;
+      } else rb.warned = false;
     }
     if (performance.now() - opp.lastSeen > 3000 && mode === 'match') boardMsg = 'Gegner reagiert nicht …';
   }
@@ -890,6 +930,11 @@ function update(dt, t) {
     p.rotation.x += dt * 8; p.scale.setScalar(Math.max(0.01, p.userData.life));
     if (p.userData.life <= 0) { scene.remove(p); parts.splice(i, 1); }
   }
+  for (let i = trail.length - 1; i >= 0; i--) {
+    const m = trail[i]; m.userData.life -= dt; m.scale.setScalar(Math.max(0.01, m.userData.life / 0.22));
+    if (m.userData.life <= 0) { scene.remove(m); trail.splice(i, 1); }
+  }
+  if (flashT > 0) { flashT -= dt; flash.material.opacity = Math.max(0, flashT / 0.9) * 0.55; flash.visible = flashT > 0; }
   for (let i = explos.length - 1; i >= 0; i--) {
     const e = explos[i]; e.t += dt; e.s.scale.setScalar(0.1 + e.t / 0.35 * EXPLO_RADIUS);
     e.s.material.opacity = Math.max(0, 0.8 - e.t * 2);
@@ -904,7 +949,7 @@ function update(dt, t) {
     sendAcc = 0;
     camera.getWorldQuaternion(tmpQ);
     const r3 = v => [+v.x.toFixed(3), +v.y.toFixed(3), +v.z.toFixed(3)];
-    netSend({ t: 's', h: r3(myHead), q: tmpQ.toArray().map(x => +x.toFixed(3)),
+    netSend({ t: 's', v: VERSION, h: r3(myHead), q: tmpQ.toArray().map(x => +x.toFixed(3)),
       l: r3(handPos(hands.left, tmp1)), r: r3(handPos(hands.right, tmp2)), a: alive ? 1 : 0,
       b: myBooms.filter(b => b.state !== 'gone' && alive).map(b => [b.id, ...r3(b.mesh.position), b.state === 'fly' ? 1 : 0, myPower]) });
   }
@@ -913,10 +958,12 @@ function update(dt, t) {
 function updateBoom(b, dt, myHead) {
   const h = hands[b.hand];
   if (b.state === 'gone') {
+    b.shadow.visible = false;
     b.respawn -= dt; if (b.respawn <= 0 && alive) { b.state = 'held'; b.mesh.visible = true; sfx.catch(); }
     return;
   }
   b.mesh.visible = alive;
+  b.shadow.visible = false;
   if (b.state === 'held') {
     handPos(h, b.pos); h.obj.getWorldQuaternion(tmpQ);
     b.mesh.position.copy(b.pos).add(tmp1.set(0, 0, -0.06).applyQuaternion(tmpQ));
@@ -977,6 +1024,8 @@ function updateBoom(b, dt, myHead) {
   b.pos.copy(np);
   b.mesh.position.copy(b.pos);
   b.mesh.rotation.set(0, b.mesh.rotation.y + 26 * dt, 0);
+  placeShadow(b.shadow, b.pos, true);
+  b.trailT -= dt; if (b.trailT <= 0) { b.trailT = 0.02; addTrail(b.pos, b.mesh.userData.mat.color.getHex()); }
   // Treffer
   if (!b.hit) {
     if (hitsOpp(b.pos)) {
