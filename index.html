@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bumerang-Duell VR</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d1020;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+  canvas{display:block}
+  #lobby{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 30%,#2a2f5c,#0d1020 70%);z-index:10}
+  .card{width:min(520px,92vw);text-align:center}
+  h1{font-size:44px;margin:0 0 4px;letter-spacing:1px}
+  h1 span.o{color:#ff8a1f} h1 span.b{color:#2ec8ff}
+  p.sub{opacity:.75;margin:0 0 28px}
+  label{display:block;font-size:14px;opacity:.7;margin-bottom:6px}
+  input{font-size:28px;width:140px;text-align:center;padding:8px;border-radius:12px;border:2px solid #444a7a;background:#161a33;color:#fff}
+  button{display:block;width:100%;margin-top:14px;font-size:24px;font-weight:700;padding:18px;border-radius:16px;border:0;cursor:pointer}
+  #vrBtn{background:#ff8a1f;color:#1a0c00}
+  #vrBtn:disabled{background:#555;color:#999;cursor:default}
+  #deskBtn{background:#262b52;color:#fff;font-size:18px;padding:14px}
+  #status{margin-top:18px;min-height:24px;opacity:.85}
+  .help{margin-top:24px;font-size:14px;opacity:.65;line-height:1.6;text-align:left}
+  #deskHud{position:fixed;left:50%;top:50%;width:8px;height:8px;margin:-4px;border-radius:50%;background:#fff;opacity:.7;display:none;z-index:5}
+</style>
+</head>
+<body>
+<div id="lobby"><div class="card">
+  <h1><span class="o">BUMERANG</span>-<span class="b">DUELL</span> VR</h1>
+  <p class="sub">1 gegen 1 · zwei Quests im selben WLAN</p>
+  <label>Raum-Code (auf beiden Quests gleich)</label>
+  <input id="room" value="1" maxlength="6" inputmode="numeric">
+  <button id="vrBtn" disabled>VR STARTEN</button>
+  <button id="deskBtn">Am Bildschirm spielen (Maus/Tastatur)</button>
+  <div id="status">Prüfe VR …</div>
+  <div class="help">
+    <b>Steuerung VR:</b> Linker Stick laufen · Rechter Stick drehen · A/X Dash<br>
+    Bumerang werfen: Wurfbewegung + <b>Trigger</b> (oder Grip halten &amp; loslassen)<br>
+    Bumerang fliegt: Trigger = zurückholen · Nahkampf: mit Bumerang zuschlagen<br>
+    Fliegenden Bumerang mit deinem eigenen wegschlagen = <b>Parade</b><br>
+    <b>Bildschirm:</b> WASD · Maus · Klick werfen · Rechtsklick zurück · Shift Dash · E Schlag
+  </div>
+</div></div>
+<div id="deskHud"></div>
+<script src="./peerjs.min.js"></script>
+<script type="module" src="./game.js"></script>
+</body>
+</html>
