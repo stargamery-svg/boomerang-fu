@@ -4,13 +4,13 @@ import * as THREE from './three.module.min.js';
 // =====================================================================
 // Konstanten / Tuning
 // =====================================================================
-const VERSION = 3;
+const VERSION = 4;
 const A = 8.0;                 // halbe Arenagroesse (16 x 16 m)
 const MOVE_SPEED = 3.0;
 const DASH_DIST = 3.0, DASH_TIME = 0.12, DASH_CD = 0.9;
 const FLY_H = 1.25;            // Flughoehe Bot
 const FLY_MIN = 0.3, FLY_MAX = 1.9; // Bumerang bleibt zwischen Knie- und Kopfhoehe
-const BOOM_MIN_SPEED = 8, BOOM_MAX_SPEED = 22, BOOM_RETURN_SPEED = 16;
+const BOOM_MIN_SPEED = 6, BOOM_MAX_SPEED = 24, BOOM_RETURN_SPEED = 16;
 const HIT_RADIUS = 0.4;
 const CATCH_RADIUS = 0.42;
 const EXPLO_RADIUS = 2.0;
@@ -963,10 +963,15 @@ function throwBoom(h, velWorld, isDesktop = false) {
     if (dir.lengthSq() < 1e-4) dir.copy(headF);
     dir.normalize();
   }
-  const speed = clamp(hs * 2.0, BOOM_MIN_SPEED, BOOM_MAX_SPEED);
-  const range = clamp(3 + hs * 1.6, 5, 18);
-  // echter Bumerang zieht einen leichten Bogen: Rechtshaender nach links, Linkshaender nach rechts
-  const curve = (h.name === 'right' ? 1 : -1) * 0.16 * speed / range;
+  // Wurfkraft bestimmt Tempo UND Weite deutlich (schwacher Wurf = kurz, harter Wurf = quer ueber die Map)
+  const speed = clamp(hs * 2.2, BOOM_MIN_SPEED, BOOM_MAX_SPEED);
+  const range = clamp(hs * 1.9, 3, 18);
+  // Neigung des Handgelenks beim Loslassen (wie Disc Golf in Sports Champions):
+  // linke Kante tiefer -> Kurve nach links, rechte Kante tiefer -> Kurve nach rechts, flach -> fast gerade
+  let tilt = 0;
+  if (!isDesktop) { h.obj.getWorldQuaternion(tmpQ); tilt = Math.asin(clamp(tmp3.set(1, 0, 0).applyQuaternion(tmpQ).y, -1, 1)); }
+  tilt = clamp(tilt, -0.8, 0.8);
+  const curve = tilt * 1.5 * speed / range;
   // Zielhilfe: nur wenn fast drauf gezielt; gleicht den Bogen aus
   const target = getTargetPos(tmp2);
   if (target) {
@@ -985,7 +990,7 @@ function throwBoom(h, velWorld, isDesktop = false) {
   const launch = (b, d) => {
     handPos(h, b.pos); b.pos.y = clamp(b.pos.y, 0.5, FLY_MAX); b.vy = vy;
     b.state = 'fly'; b.phase = 'out'; b.traveled = 0; b.tBack = 0; b.hit = false; b.exploded = false;
-    b.vel.copy(d).multiplyScalar(speed); b.range = range; b.curve = curve; b.hand = h.name; b.mesh.visible = true;
+    b.vel.copy(d).multiplyScalar(speed); b.range = range; b.curve = curve; b.tilt = tilt; b.spin = 0; b.hand = h.name; b.mesh.visible = true;
   };
   launch(mainBoom, dir);
   if (myPower === 'multi') for (const a of [-0.3, 0.3]) { const e = newBoom(true); launch(e, dir.clone().applyAxisAngle(UP, a)); }
@@ -1079,7 +1084,7 @@ function update(dt, t) {
     // Loslassen = Wurf (wie Wii Bowling). Zu langsam = nur loslassen, kein Wurf.
     if (!btn && h.prevBtn && h.grabbed) {
       h.grabbed = false;
-      if (holding) { const v = releaseVel(h, tmp1); if (v.length() > 1.4) throwBoom(h, v); }
+      if (holding) { const v = releaseVel(h, tmp1); if (v.length() > 1.2) throwBoom(h, v); }
     }
     if (aBtn && !h.prevA) {
       const d = V();
@@ -1205,8 +1210,8 @@ function updateBoom(b, dt, myHead) {
   if (b.state === 'held') {
     // In der Hand: senkrecht im Griff, Knick nach vorne. Gepackt = leuchtet.
     handPos(h, b.pos); h.obj.getWorldQuaternion(tmpQ);
-    b.mesh.quaternion.copy(tmpQ); b.mesh.rotateZ(Math.PI / 2);
-    b.mesh.position.copy(b.pos).add(tmp1.set(0, 0.02, -0.07).applyQuaternion(tmpQ));
+    b.mesh.quaternion.copy(tmpQ);
+    b.mesh.position.copy(b.pos).add(tmp1.set(0, 0.0, -0.09).applyQuaternion(tmpQ));
     b.mesh.userData.mat.emissiveIntensity = h.grabbed ? 0.9 : (myPower ? 0.7 : 0.25);
     if (alive && canMove) {
       const spd = curVel(h, tmp2).length();
@@ -1258,7 +1263,9 @@ function updateBoom(b, dt, myHead) {
   }
   cutGrassAt(b.pos);
   b.mesh.position.copy(b.pos);
-  b.mesh.rotation.set(0, b.mesh.rotation.y + 26 * dt, 0);
+  b.spin = (b.spin || 0) + 26 * dt; b.tilt = (b.tilt || 0) * Math.exp(-0.6 * dt);
+  tmp1.set(b.vel.x, 0, b.vel.z).normalize();
+  b.mesh.quaternion.setFromAxisAngle(tmp1, -b.tilt).multiply(tmpQ.setFromAxisAngle(UP, b.spin));
   placeShadow(b.shadow, b.pos, true);
   b.trailT -= dt; if (b.trailT <= 0) { b.trailT = 0.02; addTrail(b.pos, b.mesh.userData.mat.color.getHex()); }
 }
