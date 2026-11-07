@@ -18,6 +18,9 @@
   #vrBtn{background:#ff8a1f;color:#1a0c00}
   #vrBtn:disabled{background:#555;color:#999;cursor:default}
   #deskBtn{background:#262b52;color:#fff;font-size:18px;padding:14px}
+  .diff{display:flex;gap:8px;margin-top:14px}
+  .diff button{margin:0;font-size:17px;padding:12px;background:#262b52;color:#fff;border:2px solid transparent}
+  .diff button.on{border-color:#ff4d6d;background:#3a1f35}
   #status{margin-top:18px;min-height:24px;opacity:.85}
   .help{margin-top:24px;font-size:14px;opacity:.65;line-height:1.6;text-align:left}
   #deskHud{position:fixed;left:50%;top:50%;width:8px;height:8px;margin:-4px;border-radius:50%;background:#fff;opacity:.7;display:none;z-index:5}
@@ -29,15 +32,18 @@
   <p class="sub">1 gegen 1 · zwei Quests im selben WLAN</p>
   <label>Raum-Code (auf beiden Quests gleich)</label>
   <input id="room" value="1" maxlength="6" inputmode="numeric">
+  <label style="margin-top:16px">Bot-Stärke fürs Training (allein im Raum)</label>
+  <div class="diff"><button data-diff="leicht">Leicht</button><button data-diff="mittel">Mittel</button><button data-diff="schwer">Schwer</button></div>
   <button id="vrBtn" disabled>VR STARTEN</button>
   <button id="deskBtn">Am Bildschirm spielen (Maus/Tastatur)</button>
   <div id="status">Prüfe VR …</div>
   <div class="help">
-    <b>Steuerung VR:</b> Linker Stick laufen · Rechter Stick drehen · A/X Dash<br>
-    Bumerang werfen: Wurfbewegung + <b>Trigger</b> (oder Grip halten &amp; loslassen)<br>
-    Bumerang fliegt: Trigger = zurückholen · Nahkampf: mit Bumerang zuschlagen<br>
-    Fliegenden Bumerang mit deinem eigenen wegschlagen = <b>Parade</b><br>
-    <b>Bildschirm:</b> WASD · Maus · Klick werfen · Rechtsklick zurück · Shift Dash · E Schlag
+    <b>Werfen wie in echt:</b> Grip oder Trigger <b>halten</b> = packen · ausholen · <b>loslassen</b> = Wurf<br>
+    Bumerang fliegt: Knopf drücken = zurückholen · Mit Bumerang zuschlagen = Nahkampf<br>
+    Fliegenden Bumerang mit deinem wegschlagen = <b>Parade</b> · Ducken weicht aus<br>
+    Linker Stick laufen · Rechter Stick drehen · A/X Dash · B/Y Bot-Stärke<br>
+    <b>Achtung:</b> Teiche = raus! Im hohen Gras kann man sich verstecken.<br>
+    <b>Bildschirm:</b> WASD · Maus · Klick werfen · Rechtsklick zurück · Shift Dash · E Schlag · B Bot
   </div>
 </div></div>
 <div id="deskHud"></div>
