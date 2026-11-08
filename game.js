@@ -4,7 +4,7 @@ import * as THREE from './three.module.min.js';
 // =====================================================================
 // Konstanten / Tuning
 // =====================================================================
-const VERSION = 5;
+const VERSION = 6;
 const A = 8.0;                 // halbe Arenagroesse (16 x 16 m)
 const MOVE_SPEED = 3.0;
 const DASH_DIST = 3.0, DASH_TIME = 0.12, DASH_CD = 0.9;
@@ -16,7 +16,8 @@ const CATCH_RADIUS = 0.42;
 const EXPLO_RADIUS = 2.0;
 const WIN_SCORE = 5;
 const COLORS = [0xff8a1f, 0x2ec8ff];
-const NAMES = ['ORANGE', 'BLAU'];
+const NAMES = ['MANDARINE', 'BLAUBEERE'];
+const FRUITS = ['mandarine', 'blaubeere'];
 const CSS = ['#ff8a1f', '#2ec8ff'];
 const BOT_COLOR = 0xff4d6d;
 const SPAWNS = [{ x: 0, z: -6.8, yaw: Math.PI }, { x: 0, z: 6.8, yaw: 0 }];
@@ -34,6 +35,7 @@ const MAPS = [
     circles: [],
     bushes: [{ x: -5.4, z: -5.2 }, { x: 5.4, z: 5.2 }, { x: 5.4, z: -5.2 }, { x: -5.4, z: 5.2 }],
     bamboo: [{ x: 0, z: -3.6 }, { x: 0, z: 3.6 }, { x: -4.4, z: 0 }, { x: 4.4, z: 0 }, { x: 0, z: 0 }],
+    pots: [[-6.7, -6.7], [6.7, 6.7], [-1.3, -6.9], [1.3, 6.9], [-6.7, 3.6], [6.7, -3.6], [-3.6, -0.9], [3.6, 0.9]],
     crates: [[0, -1.8], [0, 1.8], [-6.5, 0], [6.5, 0], [-2.2, -5.6], [2.2, 5.6], [-2.4, 3.2], [2.4, -3.2]] },
   { name: 'FLIPPER-GARTEN', floor: 'tiles', wall: 'neon',
     blocks: [{ x: -6.3, z: 0, hw: 0.25, hd: 1.4, h: 1.6 }, { x: 6.3, z: 0, hw: 0.25, hd: 1.4, h: 1.6 }],
@@ -46,6 +48,7 @@ const MAPS = [
     ],
     bushes: [{ x: -1.6, z: -5.4 }, { x: 1.6, z: 5.4 }],
     bamboo: [],
+    pots: [[-6.8, -2.6], [6.8, 2.6], [-1.6, -6.9], [1.6, 6.9], [-4.6, 0.9], [4.6, -0.9]],
     crates: [[0, -2], [0, 2], [-6.6, -6.2], [6.6, 6.2], [6.6, -6.2], [-6.6, 6.2], [-3.2, 0], [3.2, 0]] },
   { name: 'ROTOR-TEMPEL', floor: 'sand', wall: 'stone',
     blocks: [
@@ -58,14 +61,15 @@ const MAPS = [
     bamboo: [],
     rotor: { len: 7.0, w: 0.35, h: 1.6, speed: 0.5 },
     portals: [[{ x: -7.1, z: -2.8 }, { x: 7.1, z: 2.8 }], [{ x: 7.1, z: -2.8 }, { x: -7.1, z: 2.8 }]],
+    pots: [[-6.8, -6.8], [6.8, 6.8], [-3.6, -4.0], [3.6, 4.0], [-6.8, 5.6], [6.8, -5.6]],
     crates: [[0, -4.7], [0, 4.7], [-6.6, -6.5], [6.6, 6.5], [-3.4, 6.5], [3.4, -6.5]] },
 ];
 let curMap = -1, MAP = MAPS[0];
 let mapPref = 'rot';
 try { mapPref = localStorage.getItem('bd_map') || 'rot'; } catch (e) {}
 const PORTAL_COLORS = [0xb36bff, 0x37e0c0];
-const POWER_LABEL = { multi: 'MULTI-BUMERANG', explosive: 'EXPLOSIV', shield: 'SCHILD', teleport: 'TELEPORT' };
-const POWER_COLOR = { multi: '#ffe14a', explosive: '#ff4040', shield: '#7dff9a', teleport: '#c37bff' };
+const POWER_LABEL = { multi: 'MULTI-BUMERANG', explosive: 'EXPLOSIV', shield: 'SCHILD', teleport: 'TELEPORT', telekinesis: 'TELEKINESE', fire: 'FEUER', double: 'DOPPEL-BUMERANG', disguise: 'VERKLEIDUNG' };
+const POWER_COLOR = { multi: '#ffe14a', explosive: '#ff4040', shield: '#7dff9a', teleport: '#c37bff', telekinesis: '#5fd0ff', fire: '#ff8a00', double: '#ffffff', disguise: '#d9a066' };
 const BOT_LV = {
   leicht: { speed: 1.5, cd: [3.2, 4.8], err: 0.30, lead: 0.0, dodge: 0.0, react: 0.8, boom: 11, melee: false, label: 'LEICHT' },
   mittel: { speed: 2.3, cd: [2.0, 3.2], err: 0.13, lead: 0.5, dodge: 0.45, react: 0.5, boom: 14, melee: true, label: 'MITTEL' },
@@ -195,7 +199,7 @@ function woodTexture() {
 // =====================================================================
 // Arena
 // =====================================================================
-const tufts = [], bamboos = [], bumpers = [], portalMeshes = [];
+const tufts = [], bamboos = [], bumpers = [], portalMeshes = [], pots = [];
 let waterTex = null, rotorMesh = null, roundT0 = 0;
 const mapGroup = new THREE.Group(); scene.add(mapGroup);
 const TEX = {};
@@ -223,7 +227,7 @@ const TEX = {};
 function buildMap(id) {
   curMap = id; MAP = MAPS[id];
   while (mapGroup.children.length) mapGroup.remove(mapGroup.children[0]);
-  tufts.length = 0; bamboos.length = 0; bumpers.length = 0; portalMeshes.length = 0; rotorMesh = null;
+  tufts.length = 0; bamboos.length = 0; bumpers.length = 0; portalMeshes.length = 0; pots.length = 0; rotorMesh = null;
   const add = m => { mapGroup.add(m); return m; };
   // Boden
   const floor = add(new THREE.Mesh(new THREE.PlaneGeometry(A * 2, A * 2), new THREE.MeshStandardMaterial({ map: TEX[MAP.floor], roughness: 0.9 })));
@@ -292,6 +296,8 @@ function buildMap(id) {
       bamboos.push({ m, x, z, cut: false, sy: m.scale.y });
     }
   });
+  // Kruege (zerbrechlich, Tarnung fuer Verkleidung)
+  (MAP.pots || []).forEach(([x, z]) => { const m = add(makePot()); m.position.set(x, 0, z); m.rotation.y = Math.random() * 6; pots.push({ m, x, z, broken: false }); });
   // Rotor
   if (MAP.rotor) {
     const R = MAP.rotor, g = new THREE.Group();
@@ -342,12 +348,17 @@ function rotorWorld(lx, lz, ang) { const c = Math.cos(ang), s = Math.sin(ang); r
 function regrowGrass() {
   for (const t of tufts) { t.cut = false; t.m.scale.set(1, 1, 1); }
   for (const b of bamboos) { b.cut = false; b.m.scale.set(1, b.sy, 1); }
+  for (const p of pots) { p.broken = false; p.m.visible = true; }
 }
 function cutGrassAt(p) {
   if (p.y > 2.4) return;
   if (p.y < 1.4) for (const t of tufts) {
     if (t.cut) continue;
     if (Math.abs(p.x - t.x) < 0.32 && Math.abs(p.z - t.z) < 0.32) { t.cut = true; t.m.scale.set(1.2, 0.1, 1.2); burst(tmp3.set(t.x, 0.5, t.z), 0x58b84a, 5, 2); }
+  }
+  if (p.y < 1.0) for (const pt of pots) {
+    if (pt.broken) continue;
+    if (Math.hypot(p.x - pt.x, p.z - pt.z) < 0.4) { pt.broken = true; pt.m.visible = false; burst(tmp3.set(pt.x, 0.5, pt.z), 0xc8693a, 18, 3); sfx.shatter(); }
   }
   for (const b of bamboos) {
     if (b.cut) continue;
@@ -486,6 +497,9 @@ const sfx = {
   shield: () => tone('sine', 400, 1200, 0.25, 0.2),
   teleport: () => { tone('sine', 200, 2000, 0.25, 0.2); noise(0.25, 'bandpass', 3000, 400, 0.2); },
   boing: () => { tone('sine', 300, 900, 0.15, 0.3); tone('square', 600, 1500, 0.08, 0.08); },
+  shatter: () => { noise(0.25, 'highpass', 1800, 4000, 0.3); tone('triangle', 900, 400, 0.12, 0.1); },
+  fire: () => noise(0.4, 'lowpass', 900, 300, 0.25),
+  slow: () => tone('sine', 220, 80, 0.8, 0.25),
   chop: () => noise(0.08, 'highpass', 2500, 5000, 0.2),
   portal: () => tone('sine', 1500, 300, 0.2, 0.18),
   splash: () => { noise(0.6, 'bandpass', 1500, 300, 0.5); tone('sine', 300, 120, 0.3, 0.2); },
@@ -573,23 +587,69 @@ function makeBoomerangMesh(color) {
 }
 function setBoomPowerLook(mesh, power) {
   const m = mesh.userData.mat;
-  const c = power === 'explosive' ? 0xff3030 : power === 'teleport' ? 0xb36bff : power === 'multi' ? 0xffe14a : mesh.userData.base;
+  const c = power === 'explosive' ? 0xff3030 : power === 'teleport' ? 0xb36bff : power === 'multi' ? 0xffe14a : power === 'telekinesis' ? 0x5fd0ff : power === 'fire' ? 0xff7a00 : mesh.userData.base;
   m.color.setHex(c); m.emissive.setHex(c); m.emissiveIntensity = power ? 0.7 : 0.25;
 }
-function makeAvatar(color) {
+function fruitTexture(kind) {
+  const { g, t } = canvasTex(256, 128);
+  if (kind === 'mandarine') {
+    g.fillStyle = '#ff8a1f'; g.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 260; i++) { g.fillStyle = Math.random() < 0.5 ? 'rgba(255,190,90,.55)' : 'rgba(200,90,0,.35)'; g.beginPath(); g.arc(Math.random() * 256, Math.random() * 128, rand(1, 2.4), 0, 7); g.fill(); }
+  } else if (kind === 'blaubeere') {
+    const gr = g.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, '#3a4fd8'); gr.addColorStop(1, '#2a2f8f'); g.fillStyle = gr; g.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 40; i++) { g.fillStyle = 'rgba(190,210,255,.18)'; g.beginPath(); g.arc(Math.random() * 256, Math.random() * 128, rand(4, 10), 0, 7); g.fill(); }
+  } else {
+    const gr = g.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, '#ff4d6d'); gr.addColorStop(0.75, '#ff7d95'); gr.addColorStop(1, '#fff0f3'); g.fillStyle = gr; g.fillRect(0, 0, 256, 128);
+  }
+  return t;
+}
+function makePot() {
+  const pts = [[0, 0], [0.2, 0], [0.26, 0.08], [0.34, 0.3], [0.33, 0.55], [0.22, 0.72], [0.15, 0.8], [0.17, 0.86], [0.2, 0.9], [0.14, 0.9]].map(([x, y]) => new THREE.Vector2(x, y));
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.55, 4, 10), mat(color));
+  const body = new THREE.Mesh(new THREE.LatheGeometry(pts, 16), new THREE.MeshStandardMaterial({ color: 0xc8693a, roughness: 0.85, side: THREE.DoubleSide }));
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.335, 0.025, 6, 20), mat(0xf0d9a0)); band.rotation.x = Math.PI / 2; band.position.y = 0.42;
+  g.add(body, band); return g;
+}
+function makeAvatar(color, kind = 'mandarine') {
+  const g = new THREE.Group();
+  const bodyCol = kind === 'blaubeere' ? 0x4a5fe8 : kind === 'radieschen' ? 0xff6f88 : 0xffa34a;
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.35, 4, 10), mat(bodyCol));
   const head = new THREE.Group();
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), mat(color));
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.1), mat(0x111122, 0x223355, 0.6)); visor.position.set(0, 0.02, -0.12);
-  const band = new THREE.Mesh(new THREE.TorusGeometry(0.165, 0.025, 6, 20), mat(0xffffff)); band.rotation.x = Math.PI / 2; band.position.y = 0.06;
-  head.add(skull, visor, band);
-  const lh = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), mat(0xffffff));
+  const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 16), new THREE.MeshStandardMaterial({ map: fruitTexture(kind), roughness: 0.6 }));
+  if (kind === 'mandarine') fruit.scale.set(1.08, 0.92, 1.08);
+  head.add(fruit);
+  // Gesicht (schaut nach -z wie die Kamera)
+  const white = mat(0xffffff), black = mat(0x111111);
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 10), white); eye.position.set(sx * 0.068, 0.035, -0.17); eye.scale.z = 0.6;
+    const pup = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 8), black); pup.position.set(sx * 0.068, 0.03, -0.198);
+    head.add(eye, pup);
+  }
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.01, 6, 12, Math.PI), black); mouth.position.set(0, -0.045, -0.185); mouth.rotation.z = Math.PI;
+  head.add(mouth);
+  if (kind === 'mandarine') {
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.015, 0.05, 6), mat(0x5a3a1a)); stem.position.y = 0.2;
+    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 6), mat(0x3fae3a)); leaf.scale.set(1.4, 0.25, 0.6); leaf.position.set(0.05, 0.215, 0); leaf.rotation.z = 0.4;
+    head.add(stem, leaf);
+  } else if (kind === 'blaubeere') {
+    for (let i = 0; i < 5; i++) {
+      const a = i / 5 * Math.PI * 2, c = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.06, 5), mat(0x23286e));
+      c.position.set(Math.cos(a) * 0.045, 0.2, Math.sin(a) * 0.045); c.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); head.add(c);
+    }
+  } else {
+    for (let i = 0; i < 3; i++) {
+      const lf = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), mat(0x4fbf3f)); lf.scale.set(0.5, 1.8, 0.25);
+      lf.position.set((i - 1) * 0.04, 0.29, 0); lf.rotation.z = (i - 1) * 0.5; head.add(lf);
+    }
+  }
+  const glove = mat(0xffffff);
+  const lh = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), glove);
   const rh = lh.clone();
   const shield = new THREE.Mesh(new THREE.SphereGeometry(0.75, 20, 14), new THREE.MeshBasicMaterial({ color: 0x7dff9a, transparent: true, opacity: 0.22, depthWrite: false }));
   shield.visible = false;
-  g.add(body, head, lh, rh, shield);
-  return { g, body, head, lh, rh, shield };
+  const pot = makePot(); pot.visible = false; pot.scale.setScalar(1.05);
+  g.add(body, head, lh, rh, shield, pot);
+  return { g, body, head, lh, rh, shield, pot };
 }
 function makeHandMesh(color) {
   const g = new THREE.Group();
@@ -691,11 +751,34 @@ function newBoom(extra = false) {
   return b;
 }
 let mainBoom = null;
+const mains = () => myBooms.filter(b => !b.extra);
+const heldIn = name => myBooms.find(b => !b.extra && b.state === 'held' && b.hand === name);
+const flyingFrom = name => myBooms.find(b => !b.extra && b.state === 'fly' && b.hand === name);
+const anyFlying = () => myBooms.find(b => !b.extra && b.state === 'fly');
+const anyHeld = () => myBooms.find(b => !b.extra && b.state === 'held');
+let myDisguise = false;
+const firePatches = [];
+const flameGeo = new THREE.ConeGeometry(0.18, 0.5, 7); flameGeo.translate(0, 0.25, 0);
+const flameGeo2 = new THREE.ConeGeometry(0.09, 0.32, 6); flameGeo2.translate(0, 0.16, 0);
+const flameM = new THREE.MeshBasicMaterial({ color: 0xff6a00, transparent: true, opacity: 0.85, depthWrite: false });
+const flameM2 = new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.9, depthWrite: false });
+function addFire(x, z, mine) {
+  if (firePatches.length > 60) { const o = firePatches.shift(); scene.remove(o.m); }
+  const g = new THREE.Group(); g.add(new THREE.Mesh(flameGeo, flameM), new THREE.Mesh(flameGeo2, flameM2));
+  g.position.set(x, 0, z); scene.add(g);
+  firePatches.push({ x, z, t: 2.6, mine, m: g, ph: Math.random() * 6 });
+  cutGrassAt(tmp3.set(x, 0.5, z));
+}
+function clearFires() { for (const f of firePatches) scene.remove(f.m); firePatches.length = 0; }
+let burnCd = 0;
+let slowT = 0;
+function slowMo(t) { slowT = Math.max(slowT, t); sfx.slow(); }
 function resetMyBooms() {
   for (const b of myBooms) { scene.remove(b.mesh); scene.remove(b.shadow); }
   myBooms.length = 0;
   mainBoom = newBoom(false);
-  hands.left.grabbed = hands.right.grabbed = false;
+  hands.left.grabbed = hands.right.grabbed = false; hands.left.steering = hands.right.steering = null;
+  myDisguise = false;
 }
 function removeBoom(b) { scene.remove(b.mesh); scene.remove(b.shadow); const i = myBooms.indexOf(b); if (i >= 0) myBooms.splice(i, 1); }
 
@@ -704,7 +787,7 @@ const opp = { av: null, has: false, alive: true, shield: false, power: null, hea
   tHead: V(), tLh: V(), tRh: V(), tQ: new THREE.Quaternion(), booms: new Map(), lastSeen: 0, inited: false };
 function ensureOppAvatar() {
   if (opp.av || mySlot < 0) return;
-  opp.av = makeAvatar(COLORS[oppSlot()]); scene.add(opp.av.g); opp.av.g.visible = false;
+  opp.av = makeAvatar(COLORS[oppSlot()], FRUITS[oppSlot()]); scene.add(opp.av.g); opp.av.g.visible = false;
 }
 
 // ---------- Kisten ----------
@@ -744,7 +827,7 @@ function explosionFx(pos) {
 // =====================================================================
 // Bot (nur im Training, laeuft lokal)
 // =====================================================================
-const bot = { av: makeAvatar(BOT_COLOR), pos: V(), alive: false, respawn: 0.5, strafe: 1, strafeT: 0, nextThrow: 2.5, dodgeCd: 0, dashT: 0, dashV: V(),
+const bot = { av: makeAvatar(BOT_COLOR, 'radieschen'), pos: V(), alive: false, respawn: 0.5, strafe: 1, strafeT: 0, nextThrow: 2.5, dodgeCd: 0, dashT: 0, dashV: V(),
   meleeT: 0, meleeCd: 0, boom: null, lastPlayer: V(), playerVel: V() };
 scene.add(bot.av.g); bot.av.g.visible = false;
 bot.boom = { mesh: makeBoomerangMesh(BOT_COLOR), shadow: makeShadow(), state: 'held', pos: V(), vel: V(), phase: 'out', traveled: 0, range: 8, tBack: 0, trailT: 0, hit: false };
@@ -768,6 +851,7 @@ function lineFree(ax, az, bx, bz) {
 }
 function hitBot() {
   if (!bot.alive) return;
+  slowMo(0.4);
   bot.alive = false; bot.respawn = 1.6; pScore++;
   burst(tmp1.copy(bot.pos).setY(1.1), BOT_COLOR, 45, 5); sfx.kill(); bot.av.g.visible = false;
   bot.boom.state = 'held'; bot.boom.mesh.visible = false; bot.boom.shadow.visible = false;
@@ -807,7 +891,7 @@ function updateBot(dt, myHead) {
   let mvx = to.x * radial + perp.x * bot.strafe * 0.7, mvz = to.z * radial + perp.z * bot.strafe * 0.7;
   const ml = Math.hypot(mvx, mvz) || 1; mvx /= ml; mvz /= ml;
   // Nahkampf-Druck auf Schwer/Mittel, wenn Spieler den Bumerang nicht hat
-  if (L.melee && mainBoom && mainBoom.state !== 'held' && dist < 4) { mvx = to.x; mvz = to.z; }
+  if (L.melee && !anyHeld() && dist < 4 && !myDisguise) { mvx = to.x; mvz = to.z; }
   // Ausweichen
   if (bot.dodgeCd <= 0 && L.dodge > 0) {
     for (const b of myBooms) {
@@ -837,7 +921,7 @@ function updateBot(dt, myHead) {
   if (bot.meleeT > 0) { bot.meleeT -= dt; if (bot.meleeT <= 0 && dist < 1.4 && alive) practiceDeath('ERWISCHT!'); }
   // Werfen
   bot.nextThrow -= dt;
-  const los = lineFree(bot.pos.x, bot.pos.z, myHead.x, myHead.z);
+  const los = lineFree(bot.pos.x, bot.pos.z, myHead.x, myHead.z) && !(myDisguise && dist > 2.2); // verkleidet = unsichtbar fuer den Bot
   if (!los && bot.boom.state === 'held' && bot.nextThrow < 0.4 && bot.strafeT > 0.8) bot.strafeT = 0.8; // Position wechseln
   if (bot.boom.state === 'held' && bot.nextThrow <= 0 && alive && dist > 1.8 && !los) bot.nextThrow = 0.3;
   if (bot.boom.state === 'held' && bot.nextThrow <= 0 && alive && dist > 1.8 && los) {
@@ -871,8 +955,9 @@ function updateBot(dt, myHead) {
       // trifft Spieler? (Ducken unter Flughoehe = Ausweichen)
       if (!b.hit && alive && Math.hypot(b.pos.x - myHead.x, b.pos.z - myHead.z) < HIT_RADIUS && b.pos.y < myHead.y + 0.05) { b.hit = true; practiceDeath('GETROFFEN!'); }
       // Parade mit eigenem Bumerang
-      if (mainBoom && mainBoom.state === 'held' && alive && b.pos.distanceTo(mainBoom.mesh.position) < 0.4 && b.phase === 'out') {
-        b.vel.multiplyScalar(-1); b.phase = 'back'; b.tBack = 0; burst(b.pos, 0xffffff, 15, 3); sfx.parry(); haptic(hands[mainBoom.hand], 1, 60);
+      const pb = myBooms.find(x => !x.extra && x.state === 'held' && x.mesh.position.distanceTo(b.pos) < 0.4);
+      if (pb && alive && b.phase === 'out') {
+        b.vel.multiplyScalar(-1); b.phase = 'back'; b.tBack = 0; burst(b.pos, 0xffffff, 15, 3); sfx.parry(); haptic(hands[pb.hand], 1, 60);
       }
     }
     cutGrassAt(b.pos);
@@ -947,7 +1032,7 @@ function netSend(m) {
 }
 
 // ---------- Schiedsrichter (nur Host) ----------
-const POWERS = ['multi', 'explosive', 'shield', 'teleport'];
+const POWERS = ['multi', 'explosive', 'shield', 'teleport', 'telekinesis', 'fire', 'double', 'disguise'];
 class Referee {
   constructor() { this.present = [false, false]; this.P = [this.mk(), this.mk()]; this.phase = 'lobby'; this.round = 0; this.crates = {}; this.cid = 1; this.ct = null; this.pt = null; this.ft = null; }
   mk() { return { alive: true, shield: false, power: null, score: 0 }; }
@@ -1037,7 +1122,7 @@ function handle(m) {
     case 'practice':
       mode = 'practice'; pScore = 0; bScore = 0; alive = true; canMove = true; myPower = null; myShield = false; drowned = false;
       applyMap(m.map || 0); roundT0 = performance.now() / 1000;
-      resetMyBooms(); placeAtSpawn();
+      clearFires(); resetMyBooms(); placeAtSpawn();
       bot.alive = false; bot.respawn = 1.5;
       if (opp.av) opp.av.g.visible = false; opp.has = false; opp.inited = false;
       setStatus('Training gegen Bot · warte auf Spieler 2');
@@ -1046,7 +1131,7 @@ function handle(m) {
     case 'round':
       mode = 'match'; scoresArr = m.scores; alive = true; canMove = false; myPower = null; myShield = false; drowned = false;
       applyMap(m.map || 0); roundT0 = performance.now() / 1000;
-      clearCrates(); resetMyBooms(); placeAtSpawn();
+      clearCrates(); clearFires(); resetMyBooms(); placeAtSpawn();
       opp.alive = true; opp.shield = false; if (opp.av) opp.av.shield.visible = false;
       setStatus('Runde ' + m.round + ' · ' + MAP.name + ' · erster mit ' + WIN_SCORE + ' gewinnt');
       countdown = 3; countdownT = 0; showHud('3', 'Du bist ' + NAMES[mySlot], CSS[mySlot], 1); sfx.beep(523);
@@ -1060,6 +1145,8 @@ function handle(m) {
       const c = crates.get(m.id); if (c) { burst(c.m.position, 0xffcc33, 20, 3); scene.remove(c.m); crates.delete(m.id); }
       if (m.slot === mySlot) {
         myPower = m.type; myShield = m.type === 'shield';
+        if (m.type === 'double' && mains().length < 2) { const b2 = newBoom(false); b2.hand = heldIn('right') ? 'left' : 'right'; }
+        if (m.type === 'disguise') myDisguise = true;
         for (const b of myBooms) setBoomPowerLook(b.mesh, myPower);
         showHud(POWER_LABEL[m.type], powerHint(m.type), POWER_COLOR[m.type], 2.2); sfx.power();
         haptic(hands.left, 0.6, 80); haptic(hands.right, 0.6, 80);
@@ -1072,19 +1159,20 @@ function handle(m) {
       sfx.shield(); if (m.x !== undefined) burst(tmp1.set(m.x, m.y, m.z), 0x7dff9a, 25, 4);
       break;
     case 'kill': {
+      { const killer = 1 - m.victim; slowMo((scoresArr[killer] || 0) + 1 >= WIN_SCORE ? 1.4 : 0.45); }
       if (m.cause === 'water') sfx.splash(); else sfx.kill();
       if (m.victim === mySlot) {
         doFlash(m.cause === 'water' ? 0x2f9be8 : 0xff2020);
         alive = false; canMove = false;
         for (const b of myBooms) { b.mesh.visible = false; b.shadow.visible = false; }
-        const title = m.cause === 'water' ? 'INS WASSER!' : (m.cause === 'boom' && m.by === mySlot ? 'EIGENTOR!' : 'GETROFFEN!');
+        const title = m.cause === 'fire' ? 'VERBRANNT!' : m.cause === 'water' ? 'INS WASSER!' : (m.cause === 'boom' && m.by === mySlot ? 'EIGENTOR!' : 'GETROFFEN!');
         showHud(title, '', '#ff4d4d', 2.2);
         camera.getWorldPosition(tmp1); burst(tmp1.setY(1.0), m.cause === 'water' ? 0x2f9be8 : COLORS[mySlot], 40, 5);
         haptic(hands.left, 1, 300); haptic(hands.right, 1, 300);
       } else {
         opp.alive = false;
         if (opp.av) { burst(opp.head, m.cause === 'water' ? 0x2f9be8 : COLORS[oppSlot()], 50, 5); opp.av.g.visible = false; }
-        showHud(m.cause === 'water' ? 'ERTRUNKEN!' : 'KO!', m.cause === 'water' ? 'Gegner ist ins Wasser gefallen' : 'Treffer!', '#ffe14a', 1.5);
+        showHud(m.cause === 'fire' ? 'GEGRILLT!' : 'KO!', m.cause === 'fire' ? 'Gegner ist ins Feuer gelaufen' : 'Treffer!', '#ffe14a', 1.5);
         haptic(hands.right, 0.8, 120);
       }
       break;
@@ -1106,7 +1194,8 @@ function handle(m) {
   drawBoard();
 }
 function powerHint(t) {
-  return { multi: 'Wirf 3 auf einmal', explosive: 'Explodiert beim Aufprall – Abstand halten!', shield: 'Hält einen Treffer aus', teleport: 'Knopf während Flug = hinbeamen' }[t];
+  return { multi: 'Wirf 3 auf einmal', explosive: 'Explodiert beim Aufprall – Abstand halten!', shield: 'Hält einen Treffer aus', teleport: 'Knopf während Flug = hinbeamen',
+    telekinesis: 'Knopf halten während Flug = mit der Hand lenken', fire: 'Brennende Spur – Gegner nicht durchlassen!', double: 'Zweiter Bumerang in der anderen Hand', disguise: 'Du bist ein Krug, bis du wirfst' }[t];
 }
 function placeAtSpawn() {
   const s = SPAWNS[Math.max(0, mySlot)];
@@ -1135,6 +1224,7 @@ function applyRemoteState(m) {
     if (rb.pw !== pw) { rb.pw = pw; setBoomPowerLook(rb.mesh, pw || null); }
   }
   for (const [id, rb] of opp.booms) if (!seen.has(id)) { scene.remove(rb.mesh); scene.remove(rb.shadow); opp.booms.delete(id); }
+  opp.disguise = m.dg === 1;
   if (opp.av) opp.av.g.visible = opp.alive && m.a === 1 && mode !== 'practice';
 }
 function onFx(m) {
@@ -1142,6 +1232,7 @@ function onFx(m) {
     const b = myBooms.find(x => x.id === m.id);
     if (b && b.state === 'fly') { b.vel.multiplyScalar(-1.1); b.phase = 'back'; b.tBack = 0; burst(b.pos, 0xffffff, 15, 3); sfx.parry(); }
   } else if (m.kind === 'boom') { explosionFx(tmp1.set(m.x, m.y, m.z)); sfx.boom(); }
+  else if (m.kind === 'fire') addFire(m.x, m.z, false);
   else if (m.kind === 'tele') { burst(tmp1.set(m.x, 1, m.z), 0xb36bff, 25, 3); sfx.teleport(); }
 }
 
@@ -1156,7 +1247,9 @@ function getTargetPos(out) {
 }
 // velWorld = echte Abwurfgeschwindigkeit der Hand (m/s)
 function throwBoom(h, velWorld, isDesktop = false) {
-  if (!alive || !canMove || !mainBoom || mainBoom.state !== 'held') return false;
+  const mb = heldIn(h.name) || (isDesktop ? anyHeld() : null);
+  if (!alive || !canMove || !mb) return false;
+  if (mb.hand !== h.name) h = hands[mb.hand];
   let hs = velWorld.length();
   const dir = V();
   let pitch = 0;
@@ -1201,13 +1294,16 @@ function throwBoom(h, velWorld, isDesktop = false) {
     b.state = 'fly'; b.phase = 'out'; b.traveled = 0; b.tBack = 0; b.hit = false; b.exploded = false;
     b.vel.copy(d).multiplyScalar(speed); b.range = range; b.curve = curve; b.tilt = tilt; b.spin = 0; b.hand = h.name; b.mesh.visible = true;
   };
-  launch(mainBoom, dir);
+  launch(mb, dir); mb.fireT = 0; mb.steer = false; mb.steerT = 0;
+  if (myDisguise) { myDisguise = false; showHud('ENTTARNT!', '', '#d9a066', 1); }
   if (myPower === 'multi') for (const a of [-0.3, 0.3]) { const e = newBoom(true); launch(e, dir.clone().applyAxisAngle(UP, a)); }
   sfx.throw(); haptic(h, 0.6, 40);
   return true;
 }
-function recallOrTeleport() {
-  if (!mainBoom || mainBoom.state !== 'fly' || !alive) return;
+function recallOrTeleport(b) {
+  b = b || anyFlying();
+  if (!b || b.state !== 'fly' || !alive) return;
+  const mainBoom = b;
   if (myPower === 'teleport' && canMove) {
     const [x, z] = resolveCircle(mainBoom.pos.x, mainBoom.pos.z, 0.35);
     camera.getWorldPosition(tmp1);
@@ -1221,7 +1317,8 @@ function recallOrTeleport() {
 }
 function catchBoom(b, h) {
   if (b.extra) { removeBoom(b); return; }
-  b.state = 'held'; b.hand = h.name; b.vel.set(0, 0, 0); h.grabbed = false;
+  if (heldIn(h.name) && !heldIn(h.name === 'left' ? 'right' : 'left')) h = hands[h.name === 'left' ? 'right' : 'left'];
+  b.state = 'held'; b.hand = h.name; b.vel.set(0, 0, 0); b.steer = false; h.grabbed = false;
   sfx.catch(); haptic(h, 0.5, 40);
 }
 let dashT = 0, dashCd = 0; const dashV = V();
@@ -1258,14 +1355,14 @@ let countdown = 0, countdownT = 0, sendAcc = 0, last = performance.now();
 let slashCd = 0, deskPitch = 0;
 const keys = {};
 
-function update(dt, t) {
+function update(dt, t, dtReal = dt) {
   scene.updateMatrixWorld();
-  if (hudTimer > 0) { hudTimer -= dt; if (hudTimer <= 0) hud.visible = false; }
-  if (countdown > 0) { countdownT += dt; if (countdownT >= 1) { countdownT -= 1; countdown--; if (countdown > 0) { showHud(String(countdown), '', '#fff', 1); sfx.beep(523); } } }
+  if (hudTimer > 0) { hudTimer -= dtReal; if (hudTimer <= 0) hud.visible = false; }
+  if (countdown > 0) { countdownT += dtReal; if (countdownT >= 1) { countdownT -= 1; countdown--; if (countdown > 0) { showHud(String(countdown), '', '#fff', 1); sfx.beep(523); } } }
   dashCd -= dt; slashCd -= dt;
   if (waterTex) { waterTex.offset.x = t * 0.03; waterTex.offset.y = Math.sin(t * 0.5) * 0.05; }
   if (practiceDownT > 0) {
-    practiceDownT -= dt;
+    practiceDownT -= dtReal;
     if (practiceDownT <= 0 && mode === 'practice') { alive = true; canMove = true; drowned = false; placeAtSpawn(); resetMyBooms(); }
   }
 
@@ -1273,7 +1370,7 @@ function update(dt, t) {
   let moveX = 0, moveY = 0;
   for (const name of ['left', 'right']) {
     const h = hands[name];
-    sampleHand(h, t, dt);
+    sampleHand(h, t, dtReal);
     const gp = h.src && h.src.gamepad; if (!gp) continue;
     const btn = !!((gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[1] && gp.buttons[1].pressed)); // Trigger oder Grip = packen
     const aBtn = !!(gp.buttons[4] && gp.buttons[4].pressed);  // A / X = Dash
@@ -1285,12 +1382,16 @@ function update(dt, t) {
       if (Math.abs(ax) > 0.7 && h.prevStick === 0) { snapTurn(ax > 0 ? -Math.PI / 4 : Math.PI / 4); h.prevStick = 1; }
       if (Math.abs(ax) < 0.3) h.prevStick = 0;
     }
-    const holding = mainBoom && mainBoom.state === 'held' && mainBoom.hand === name;
+    const holding = heldIn(name);
     if (btn && !h.prevBtn) {
+      const other = name === 'left' ? 'right' : 'left';
+      const fl = flyingFrom(name) || (!heldIn(other) ? anyFlying() : null);
       if (holding) { h.grabbed = true; sfx.grab(); haptic(h, 0.3, 25); }
-      else if (mainBoom && mainBoom.state === 'fly') recallOrTeleport();
-      else if (mainBoom && mainBoom.state === 'held' && !hands[mainBoom.hand].grabbed) { mainBoom.hand = name; h.grabbed = true; sfx.grab(); haptic(h, 0.3, 25); }
+      else if (fl && myPower === 'telekinesis' && fl.phase === 'out') { fl.steer = true; fl.steerT = 0; h.steering = fl; sfx.grab(); haptic(h, 0.3, 25); }
+      else if (fl) recallOrTeleport(fl);
+      else if (heldIn(other) && !hands[other].grabbed && mains().length === 1) { heldIn(other).hand = name; h.grabbed = true; sfx.grab(); haptic(h, 0.3, 25); }
     }
+    if (!btn && h.prevBtn && h.steering) { const sb = h.steering; h.steering = null; if (sb.state === 'fly') { sb.steer = false; sb.phase = 'back'; sb.tBack = 0; } }
     // Loslassen = Wurf (wie Wii Bowling). Zu langsam = nur loslassen, kein Wurf.
     if (!btn && h.prevBtn && h.grabbed) {
       h.grabbed = false;
@@ -1339,7 +1440,19 @@ function update(dt, t) {
   }
   // Rotor schiebt Spieler weg (resolveCircle oben deckt es ab, hier nochmal nach Drehung)
 
-  updateBot(dt, myHead);  updateBot(dt, myHead);
+  // ---------- Feuer ----------
+  burnCd -= dt;
+  for (let i = firePatches.length - 1; i >= 0; i--) {
+    const f = firePatches[i]; f.t -= dt;
+    const k = Math.min(1, f.t / 0.5); f.m.scale.set(k, k * (0.85 + Math.sin(t * 18 + f.ph) * 0.2), k);
+    if (f.t <= 0) { scene.remove(f.m); firePatches.splice(i, 1); continue; }
+    if (!f.mine && alive && canMove && burnCd <= 0 && Math.hypot(myHead.x - f.x, myHead.z - f.z) < 0.42) {
+      burnCd = 1.0; if (mode === 'match') sendHit(mySlot, 'fire', myHead);
+    }
+    if (f.mine && mode === 'practice' && bot.alive && Math.hypot(bot.pos.x - f.x, bot.pos.z - f.z) < 0.42) hitBot();
+  }
+
+  updateBot(dt, myHead);
 
   // ---------- Gegner glaetten ----------
   if (opp.av && opp.has) {
@@ -1351,10 +1464,13 @@ function update(dt, t) {
     av.body.position.set(opp.head.x, Math.max(0.45, opp.head.y - 0.62), opp.head.z); av.body.rotation.set(0, e.y, 0);
     av.lh.position.copy(opp.lh); av.rh.position.copy(opp.rh);
     av.shield.position.set(opp.head.x, Math.max(0.6, opp.head.y - 0.5), opp.head.z);
-    av.shield.visible = opp.shield && opp.alive;
+    av.shield.visible = opp.shield && opp.alive && !opp.disguise;
+    const dg = !!opp.disguise;
+    av.head.visible = av.body.visible = av.lh.visible = av.rh.visible = !dg; av.pot.visible = dg;
+    if (dg) av.pot.position.set(opp.head.x, 0, opp.head.z);
     for (const rb of opp.booms.values()) {
       rb.pos.lerp(rb.tgt, 1 - Math.exp(-25 * dt)); rb.mesh.position.copy(rb.pos);
-      rb.mesh.visible = opp.alive && mode !== 'practice';
+      rb.mesh.visible = opp.alive && mode !== 'practice' && !(opp.disguise && !rb.fly);
       if (rb.fly) rb.mesh.rotation.set(0, rb.mesh.rotation.y + 25 * dt, 0); else rb.mesh.rotation.set(-Math.PI / 2, 0, 0);
       rb.parryCd -= dt;
       const vis = rb.mesh.visible && rb.fly === 1;
@@ -1399,7 +1515,7 @@ function update(dt, t) {
     const m = trail[i]; m.userData.life -= dt; m.scale.setScalar(Math.max(0.01, m.userData.life / 0.22));
     if (m.userData.life <= 0) { scene.remove(m); trail.splice(i, 1); }
   }
-  if (flashT > 0) { flashT -= dt; flash.material.opacity = Math.max(0, flashT / 0.9) * 0.55; flash.visible = flashT > 0; }
+  if (flashT > 0) { flashT -= dtReal; flash.material.opacity = Math.max(0, flashT / 0.9) * 0.55; flash.visible = flashT > 0; }
   for (let i = explos.length - 1; i >= 0; i--) {
     const e = explos[i]; e.t += dt; e.s.scale.setScalar(0.1 + e.t / 0.35 * EXPLO_RADIUS);
     e.s.material.opacity = Math.max(0, 0.8 - e.t * 2);
@@ -1413,7 +1529,7 @@ function update(dt, t) {
     sendAcc = 0;
     camera.getWorldQuaternion(tmpQ);
     const r3 = v => [+v.x.toFixed(3), +v.y.toFixed(3), +v.z.toFixed(3)];
-    netSend({ t: 's', v: VERSION, h: r3(myHead), q: tmpQ.toArray().map(x => +x.toFixed(3)),
+    netSend({ t: 's', v: VERSION, dg: myDisguise ? 1 : 0, h: r3(myHead), q: tmpQ.toArray().map(x => +x.toFixed(3)),
       l: r3(handPos(hands.left, tmp1)), r: r3(handPos(hands.right, tmp2)), a: alive ? 1 : 0,
       b: myBooms.filter(b => b.state !== 'gone' && alive).map(b => [b.id, ...r3(b.mesh.position), b.state === 'fly' ? 1 : 0, myPower]) });
   }
@@ -1455,7 +1571,15 @@ function updateBoom(b, dt, myHead) {
   if (!alive) { b.mesh.visible = false; return; }
   const steps = Math.max(1, Math.ceil(b.vel.length() * dt / 0.08)), sdt = dt / steps;
   for (let s = 0; s < steps; s++) {
-    if (b.phase === 'out') {
+    if (b.phase === 'out' && b.steer && myPower === 'telekinesis') {
+      // Telekinese: Bumerang folgt der Zeigerichtung der Hand
+      b.steerT += sdt;
+      if (inXR) { h.obj.getWorldQuaternion(tmpQ); tmp3.set(0, 0, -1).applyQuaternion(tmpQ); } else camera.getWorldDirection(tmp3);
+      const want = Math.atan2(tmp3.x, tmp3.z), cur = Math.atan2(b.vel.x, b.vel.z);
+      let dA = want - cur; while (dA > Math.PI) dA -= 2 * Math.PI; while (dA < -Math.PI) dA += 2 * Math.PI;
+      b.vel.applyAxisAngle(UP, clamp(dA, -5 * sdt, 5 * sdt));
+      if (b.steerT > 3.5) { b.steer = false; b.phase = 'back'; b.tBack = 0; }
+    } else if (b.phase === 'out') {
       b.traveled += b.vel.length() * sdt;
       b.vel.applyAxisAngle(UP, b.curve * sdt);           // Bogenflug
       if (b.traveled >= b.range) { b.phase = 'back'; b.tBack = 0; }
@@ -1485,6 +1609,7 @@ function updateBoom(b, dt, myHead) {
     }
   }
   cutGrassAt(b.pos);
+  if (myPower === 'fire') { b.fireT = (b.fireT || 0) - dt; if (b.fireT <= 0) { b.fireT = 0.09; addFire(b.pos.x, b.pos.z, true); netSend({ t: 'fx', kind: 'fire', x: +b.pos.x.toFixed(2), z: +b.pos.z.toFixed(2) }); } }
   b.mesh.position.copy(b.pos);
   b.spin = (b.spin || 0) + 26 * dt; b.tilt = (b.tilt || 0) * Math.exp(-0.6 * dt);
   tmp1.set(b.vel.x, 0, b.vel.z).normalize();
@@ -1504,7 +1629,7 @@ function cycleMap() {
   const next = (curMap + 1) % MAPS.length;
   applyMap(next); roundT0 = performance.now() / 1000;
   clearCrates(); if (referee) referee.startCrates(800);
-  resetMyBooms(); placeAtSpawn(); bot.alive = false; bot.respawn = 1.2; bot.boom.state = 'held';
+  clearFires(); resetMyBooms(); placeAtSpawn(); bot.alive = false; bot.respawn = 1.2; bot.boom.state = 'held';
   showHud(MAP.name, 'Stick drücken = nächste Arena', '#ffe14a', 2); sfx.beep(990);
 }
 function cycleDifficulty() {
@@ -1526,6 +1651,7 @@ addEventListener('keydown', e => {
     d.copy(tmp2).multiplyScalar(-my).add(tmp3.set(-tmp2.z, 0, tmp2.x).multiplyScalar(mx)); doDash(d);
   }
   if (e.code === 'KeyB' && mode === 'practice') cycleDifficulty();
+  if (e.code === 'KeyQ') { const lb = heldIn('left'); if (lb) throwBoom(hands.left, tmp1.set(0, 0, 0), true); }
   if (e.code === 'KeyM' && mode === 'practice' && isHost) cycleMap();
   if (e.code === 'KeyE' && alive && canMove && slashCd <= 0) {
     camera.getWorldPosition(tmp1); camera.getWorldDirection(tmp2);
@@ -1536,11 +1662,13 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
+let deskSteer = null;
+addEventListener('mouseup', e => { if (e.button === 2 && deskSteer) { if (deskSteer.state === 'fly') { deskSteer.steer = false; deskSteer.phase = 'back'; deskSteer.tBack = 0; } deskSteer = null; } });
 renderer.domElement.addEventListener('mousedown', e => {
   if (inXR || !started) return;
   if (document.pointerLockElement !== renderer.domElement) { renderer.domElement.requestPointerLock(); return; }
   if (e.button === 0) throwBoom(hands.right, tmp1.set(0, 0, 0), true);
-  if (e.button === 2) recallOrTeleport();
+  if (e.button === 2) { const fl = anyFlying(); if (fl && myPower === 'telekinesis' && fl.phase === 'out') { fl.steer = true; fl.steerT = 0; deskSteer = fl; } else recallOrTeleport(); }
 });
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 addEventListener('mousemove', e => {
@@ -1600,12 +1728,13 @@ rig.position.set(SPAWNS[0].x, 0, SPAWNS[0].z); rig.rotation.y = SPAWNS[0].yaw;
 renderer.setAnimationLoop(() => {
   const now = performance.now();
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  update(dt, now / 1000);
+  const gdt = slowT > 0 ? dt * 0.25 : dt; slowT -= dt;
+  update(gdt, now / 1000, dt);
   renderer.render(scene, camera);
 });
 // Test-Hooks
 window.__bd = {
-  handle, throw: () => throwBoom(hands.right, V(), true),
+  handle, throw: () => throwBoom(hands.right, V(), true), throwLeft: () => throwBoom(hands.left, V(), true), steer: (on) => { const f = anyFlying(); if (f) { f.steer = on; f.steerT = 0; if (!on) { f.phase = 'back'; } } }, get fires() { return firePatches.length; }, get disguise() { return myDisguise; },
   throwVel: (x, y, z) => throwBoom(hands.right, V().set(x, y, z), false),
   bot, get state() { return { mySlot, mode, alive, canMove, scoresArr, isHost, myPower, oppHas: opp.has, oppAlive: opp.alive, booms: myBooms.map(b => b.state), crates: crates.size, pScore, bScore, difficulty, botAlive: bot.alive }; },
 };
