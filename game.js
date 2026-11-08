@@ -4,7 +4,7 @@ import * as THREE from './three.module.min.js';
 // =====================================================================
 // Konstanten / Tuning
 // =====================================================================
-const VERSION = 4;
+const VERSION = 5;
 const A = 8.0;                 // halbe Arenagroesse (16 x 16 m)
 const MOVE_SPEED = 3.0;
 const DASH_DIST = 3.0, DASH_TIME = 0.12, DASH_CD = 0.9;
@@ -20,17 +20,50 @@ const NAMES = ['ORANGE', 'BLAU'];
 const CSS = ['#ff8a1f', '#2ec8ff'];
 const BOT_COLOR = 0xff4d6d;
 const SPAWNS = [{ x: 0, z: -6.8, yaw: Math.PI }, { x: 0, z: 6.8, yaw: 0 }];
-// Solide Bloecke (Bumerangs prallen ab, wenn tiefer als h)
-const BLOCKS = [
-  { x: -4.3, z: -3.2, hw: 0.6, hd: 0.6, h: 1.7 }, { x: 4.3, z: 3.2, hw: 0.6, hd: 0.6, h: 1.7 },
-  { x: 4.3, z: -3.2, hw: 0.6, hd: 0.6, h: 1.7 }, { x: -4.3, z: 3.2, hw: 0.6, hd: 0.6, h: 1.7 },
-  { x: -2.3, z: 0, hw: 0.4, hd: 0.4, h: 1.7 }, { x: 2.3, z: 0, hw: 0.4, hd: 0.4, h: 1.7 },
-  { x: 0, z: 0, hw: 1.3, hd: 0.25, h: 0.7 },   // niedrige Mauer: Bumerangs fliegen drueber
+// ---------- Arenen (jede mit eigenem Gimmick) ----------
+// blocks: solide Quader | circles: runde Hindernisse (bumper = Flipper-Pilz) | bushes: hohes Gras
+// bamboo: Bambus-Haine (Bumerang schneidet durch) | rotor: drehender Balken | portals: Portal-Paare
+const MAPS = [
+  { name: 'BAMBUS-DOJO', floor: 'wood', wall: 'wood',
+    blocks: [
+      { x: -3.6, z: -2.4, hw: 0.45, hd: 0.45, h: 1.6, kind: 'lantern' }, { x: 3.6, z: 2.4, hw: 0.45, hd: 0.45, h: 1.6, kind: 'lantern' },
+      { x: 3.6, z: -2.4, hw: 0.45, hd: 0.45, h: 1.6, kind: 'lantern' }, { x: -3.6, z: 2.4, hw: 0.45, hd: 0.45, h: 1.6, kind: 'lantern' },
+      { x: -1.9, z: 0, hw: 0.9, hd: 0.2, h: 0.7 }, { x: 1.9, z: 0, hw: 0.9, hd: 0.2, h: 0.7 },
+      { x: -6.2, z: -2.6, hw: 0.2, hd: 1.0, h: 0.7 }, { x: 6.2, z: 2.6, hw: 0.2, hd: 1.0, h: 0.7 },
+    ],
+    circles: [],
+    bushes: [{ x: -5.4, z: -5.2 }, { x: 5.4, z: 5.2 }, { x: 5.4, z: -5.2 }, { x: -5.4, z: 5.2 }],
+    bamboo: [{ x: 0, z: -3.6 }, { x: 0, z: 3.6 }, { x: -4.4, z: 0 }, { x: 4.4, z: 0 }, { x: 0, z: 0 }],
+    crates: [[0, -1.8], [0, 1.8], [-6.5, 0], [6.5, 0], [-2.2, -5.6], [2.2, 5.6], [-2.4, 3.2], [2.4, -3.2]] },
+  { name: 'FLIPPER-GARTEN', floor: 'tiles', wall: 'neon',
+    blocks: [{ x: -6.3, z: 0, hw: 0.25, hd: 1.4, h: 1.6 }, { x: 6.3, z: 0, hw: 0.25, hd: 1.4, h: 1.6 }],
+    circles: [
+      { x: 0, z: 0, r: 0.75, h: 1.6, bumper: true },
+      { x: -3, z: -3, r: 0.5, h: 1.6, bumper: true }, { x: 3, z: 3, r: 0.5, h: 1.6, bumper: true },
+      { x: 3, z: -3, r: 0.5, h: 1.6, bumper: true }, { x: -3, z: 3, r: 0.5, h: 1.6, bumper: true },
+      { x: -5.3, z: -5.0, r: 0.45, h: 1.6, bumper: true }, { x: 5.3, z: 5.0, r: 0.45, h: 1.6, bumper: true },
+      { x: 5.3, z: -5.0, r: 0.45, h: 1.6, bumper: true }, { x: -5.3, z: 5.0, r: 0.45, h: 1.6, bumper: true },
+    ],
+    bushes: [{ x: -1.6, z: -5.4 }, { x: 1.6, z: 5.4 }],
+    bamboo: [],
+    crates: [[0, -2], [0, 2], [-6.6, -6.2], [6.6, 6.2], [6.6, -6.2], [-6.6, 6.2], [-3.2, 0], [3.2, 0]] },
+  { name: 'ROTOR-TEMPEL', floor: 'sand', wall: 'stone',
+    blocks: [
+      { x: -5.2, z: -4.8, hw: 0.6, hd: 0.6, h: 1.7 }, { x: 5.2, z: 4.8, hw: 0.6, hd: 0.6, h: 1.7 },
+      { x: 5.2, z: -4.8, hw: 0.6, hd: 0.6, h: 1.7 }, { x: -5.2, z: 4.8, hw: 0.6, hd: 0.6, h: 1.7 },
+      { x: -2.4, z: -5.2, hw: 0.8, hd: 0.22, h: 0.7 }, { x: 2.4, z: 5.2, hw: 0.8, hd: 0.22, h: 0.7 },
+    ],
+    circles: [],
+    bushes: [{ x: -4.9, z: 0.0 }, { x: 4.9, z: 0.0 }],
+    bamboo: [],
+    rotor: { len: 7.0, w: 0.35, h: 1.6, speed: 0.5 },
+    portals: [[{ x: -7.1, z: -2.8 }, { x: 7.1, z: 2.8 }], [{ x: 7.1, z: -2.8 }, { x: -7.1, z: 2.8 }]],
+    crates: [[0, -4.7], [0, 4.7], [-6.6, -6.5], [6.6, 6.5], [-3.4, 6.5], [3.4, -6.5]] },
 ];
-// Teiche: reinlaufen = raus
-const PONDS = [{ x: -5.4, z: 0, hw: 1.4, hd: 1.1 }, { x: 5.4, z: 0, hw: 1.4, hd: 1.1 }];
-// Hohes Gras: versteckt, wird von Bumerangs gemaeht
-const BUSHES = [{ x: -2.6, z: -3.8 }, { x: 2.6, z: 3.8 }, { x: 2.6, z: -3.8 }, { x: -2.6, z: 3.8 }];
+let curMap = -1, MAP = MAPS[0];
+let mapPref = 'rot';
+try { mapPref = localStorage.getItem('bd_map') || 'rot'; } catch (e) {}
+const PORTAL_COLORS = [0xb36bff, 0x37e0c0];
 const POWER_LABEL = { multi: 'MULTI-BUMERANG', explosive: 'EXPLOSIV', shield: 'SCHILD', teleport: 'TELEPORT' };
 const POWER_COLOR = { multi: '#ffe14a', explosive: '#ff4040', shield: '#7dff9a', teleport: '#c37bff' };
 const BOT_LV = {
@@ -85,11 +118,7 @@ function canvasTex(w, h) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   return { c, g: c.getContext('2d'), t };
 }
-function inPond(x, z, margin = 0) {
-  for (const p of PONDS) if (Math.abs(x - p.x) < p.hw - margin && Math.abs(z - p.z) < p.hd - margin) return true;
-  return false;
-}
-
+function inPond() { return false; }
 // =====================================================================
 // Texturen (eigene, Cartoon-Look)
 // =====================================================================
@@ -129,6 +158,32 @@ function waterTexture() {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 }
+function plankTexture() {
+  const { g, t } = canvasTex(512, 512);
+  for (let r = 0; r < 8; r++) {
+    g.fillStyle = ['#c99a62', '#bf8f57', '#d1a46c', '#c4945b'][r % 4]; g.fillRect(0, r * 64, 512, 64);
+    g.fillStyle = 'rgba(90,50,20,.5)'; g.fillRect(0, r * 64, 512, 3);
+    const off = (r * 173) % 512; g.fillRect(off, r * 64, 3, 64); g.fillRect((off + 256) % 512, r * 64, 3, 64);
+    g.strokeStyle = 'rgba(120,70,30,.25)'; g.lineWidth = 2;
+    for (let k = 0; k < 4; k++) { g.beginPath(); g.moveTo(0, r * 64 + 12 + k * 13); g.bezierCurveTo(170, r * 64 + 8 + k * 13, 340, r * 64 + 18 + k * 13, 512, r * 64 + 12 + k * 13); g.stroke(); }
+  }
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 3); t.anisotropy = 4; return t;
+}
+function tileTexture() {
+  const { g, t } = canvasTex(256, 256);
+  const c = ['#ffd6e8', '#c9f2ff', '#fff3b8', '#d6ffd9'];
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { g.fillStyle = c[(i + j * 2) % 4]; g.fillRect(i * 64, j * 64, 64, 64); g.strokeStyle = '#ffffff'; g.lineWidth = 4; g.strokeRect(i * 64, j * 64, 64, 64); }
+  for (let k = 0; k < 10; k++) { g.fillStyle = 'rgba(255,255,255,.7)'; g.beginPath(); g.arc(Math.random() * 256, Math.random() * 256, 4, 0, 7); g.fill(); }
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 4); t.anisotropy = 4; return t;
+}
+function sandTexture() {
+  const { g, t } = canvasTex(256, 256);
+  g.fillStyle = '#e8cf98'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { g.fillStyle = (i + j) % 2 ? '#e2c48a' : '#ecd6a4'; g.beginPath(); g.roundRect(i * 64 + 3, j * 64 + 3, 58, 58, 8); g.fill(); }
+  g.strokeStyle = 'rgba(160,110,50,.35)'; g.lineWidth = 3;
+  for (let k = 0; k < 6; k++) { const x = Math.random() * 256, y = Math.random() * 256; g.beginPath(); g.moveTo(x, y); g.lineTo(x + rand(-20, 20), y + rand(-20, 20)); g.stroke(); }
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 4); t.anisotropy = 4; return t;
+}
 function woodTexture() {
   const { g, t } = canvasTex(128, 128);
   g.fillStyle = '#b07a48'; g.fillRect(0, 0, 128, 128);
@@ -140,59 +195,16 @@ function woodTexture() {
 // =====================================================================
 // Arena
 // =====================================================================
-const tufts = [];
-let waterTex = null;
-(function buildArena() {
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(A * 2, A * 2), new THREE.MeshStandardMaterial({ map: grassTexture(), roughness: 0.95 }));
-  floor.rotation.x = -Math.PI / 2; scene.add(floor);
-  // Spawn-Zonen farbig
-  SPAWNS.forEach((s, i) => {
-    const z = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.4), new THREE.MeshBasicMaterial({ color: COLORS[i], transparent: true, opacity: 0.25, depthWrite: false }));
-    z.rotation.x = -Math.PI / 2; z.position.set(s.x, 0.006, s.z); scene.add(z);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.45, 32), new THREE.MeshBasicMaterial({ color: COLORS[i] }));
-    ring.rotation.x = -Math.PI / 2; ring.position.set(s.x, 0.01, s.z); scene.add(ring);
-  });
-  // Insel-Unterbau + Meer drumherum (Boomerang-Fu-Stil: schwebende Spielflaeche)
+const tufts = [], bamboos = [], bumpers = [], portalMeshes = [];
+let waterTex = null, rotorMesh = null, roundT0 = 0;
+const mapGroup = new THREE.Group(); scene.add(mapGroup);
+const TEX = {};
+(function buildWorld() {
+  TEX.grass = grassTexture(); TEX.wood = plankTexture(); TEX.tiles = tileTexture(); TEX.sand = sandTexture(); TEX.stone = stoneTexture(); TEX.box = woodTexture();
   const cliff = new THREE.Mesh(new THREE.BoxGeometry(A * 2 + 0.9, 3, A * 2 + 0.9), mat(0x9b6b43));
   cliff.position.y = -1.51; scene.add(cliff);
   const sea = new THREE.Mesh(new THREE.CircleGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x3fa7e0, roughness: 0.3 }));
   sea.rotation.x = -Math.PI / 2; sea.position.y = -2.6; scene.add(sea);
-  // Rand-Mauern (Stein)
-  const st = stoneTexture();
-  const wallM = new THREE.MeshStandardMaterial({ map: st, roughness: 0.9 });
-  [[0, -A - 0.2, A * 2 + 0.8, 0.4], [0, A + 0.2, A * 2 + 0.8, 0.4], [-A - 0.2, 0, 0.4, A * 2], [A + 0.2, 0, 0.4, A * 2]].forEach(([x, z, w, d]) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.6, d), wallM); m.position.set(x, 0.3, z); scene.add(m);
-  });
-  // Bloecke
-  const wood = woodTexture();
-  BLOCKS.forEach(b => {
-    const low = b.h < 1;
-    const tex = low ? wood : st.clone();
-    if (!low) { tex.needsUpdate = true; tex.repeat.set(b.hw * 1.6, b.h * 0.8); }
-    const m = new THREE.Mesh(new THREE.BoxGeometry(b.hw * 2, b.h, b.hd * 2), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
-    m.position.set(b.x, b.h / 2, b.z); scene.add(m);
-    const top = new THREE.Mesh(new THREE.BoxGeometry(b.hw * 2 + 0.06, 0.08, b.hd * 2 + 0.06), mat(low ? 0x8a5a32 : 0xd8dae6));
-    top.position.set(b.x, b.h, b.z); scene.add(top);
-  });
-  // Teiche
-  waterTex = waterTexture();
-  PONDS.forEach(p => {
-    const sand = new THREE.Mesh(new THREE.PlaneGeometry(p.hw * 2 + 0.5, p.hd * 2 + 0.5), mat(0xf1d79a));
-    sand.rotation.x = -Math.PI / 2; sand.position.set(p.x, 0.008, p.z); scene.add(sand);
-    const w = new THREE.Mesh(new THREE.PlaneGeometry(p.hw * 2, p.hd * 2), new THREE.MeshStandardMaterial({ map: waterTex, roughness: 0.2, emissive: 0x0a3a66, emissiveIntensity: 0.4 }));
-    w.rotation.x = -Math.PI / 2; w.position.set(p.x, 0.014, p.z); scene.add(w);
-  });
-  // Hohes Gras
-  const tuftGeo = new THREE.ConeGeometry(0.2, 1.35, 5); tuftGeo.translate(0, 0.675, 0);
-  const tuftMats = [mat(0x3f9a3a), mat(0x4fae42), mat(0x58b84a)];
-  BUSHES.forEach(b => {
-    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
-      const x = b.x - 0.75 + i * 0.5 + rand(-0.1, 0.1), z = b.z - 0.75 + j * 0.5 + rand(-0.1, 0.1);
-      const m = new THREE.Mesh(tuftGeo, tuftMats[(i + j) % 3]); m.position.set(x, 0, z); m.rotation.y = Math.random() * 6;
-      scene.add(m); tufts.push({ m, x, z, cut: false });
-    }
-  });
-  // Deko: Baeume und Wolken
   const trunk = mat(0x7a4a2a), leaf = mat(0x2f8f4a), leaf2 = mat(0x3fa65a);
   for (let i = 0; i < 46; i++) {
     const a = i / 46 * Math.PI * 2 + Math.random() * 0.1, r = 15 + Math.random() * 20;
@@ -207,22 +219,155 @@ let waterTex = null;
     g.position.set(Math.cos(a) * r, rand(12, 18), Math.sin(a) * r); scene.add(g);
   }
 })();
-function regrowGrass() { for (const t of tufts) { t.cut = false; t.m.scale.set(1, 1, 1); } }
-function cutGrassAt(p) {
-  if (p.y > 1.4) return;
-  for (const t of tufts) {
-    if (t.cut) continue;
-    if (Math.abs(p.x - t.x) < 0.32 && Math.abs(p.z - t.z) < 0.32) {
-      t.cut = true; t.m.scale.set(1.2, 0.1, 1.2);
-      burst(tmp3.set(t.x, 0.5, t.z), 0x58b84a, 5, 2);
+
+function buildMap(id) {
+  curMap = id; MAP = MAPS[id];
+  while (mapGroup.children.length) mapGroup.remove(mapGroup.children[0]);
+  tufts.length = 0; bamboos.length = 0; bumpers.length = 0; portalMeshes.length = 0; rotorMesh = null;
+  const add = m => { mapGroup.add(m); return m; };
+  // Boden
+  const floor = add(new THREE.Mesh(new THREE.PlaneGeometry(A * 2, A * 2), new THREE.MeshStandardMaterial({ map: TEX[MAP.floor], roughness: 0.9 })));
+  floor.rotation.x = -Math.PI / 2;
+  // Spawn-Zonen
+  SPAWNS.forEach((sp, i) => {
+    const z = add(new THREE.Mesh(new THREE.PlaneGeometry(3, 1.4), new THREE.MeshBasicMaterial({ color: COLORS[i], transparent: true, opacity: 0.25, depthWrite: false })));
+    z.rotation.x = -Math.PI / 2; z.position.set(sp.x, 0.006, sp.z);
+    const ring = add(new THREE.Mesh(new THREE.RingGeometry(0.35, 0.45, 32), new THREE.MeshBasicMaterial({ color: COLORS[i] })));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(sp.x, 0.01, sp.z);
+  });
+  // Rand
+  const wallMat = MAP.wall === 'wood' ? new THREE.MeshStandardMaterial({ map: TEX.box, roughness: 0.9 })
+    : MAP.wall === 'neon' ? new THREE.MeshStandardMaterial({ color: 0xff5fb0, emissive: 0xff2f90, emissiveIntensity: 0.5, roughness: 0.4 })
+    : new THREE.MeshStandardMaterial({ map: TEX.stone, roughness: 0.9 });
+  [[0, -A - 0.2, A * 2 + 0.8, 0.4], [0, A + 0.2, A * 2 + 0.8, 0.4], [-A - 0.2, 0, 0.4, A * 2], [A + 0.2, 0, 0.4, A * 2]].forEach(([x, z, w, d]) => {
+    add(new THREE.Mesh(new THREE.BoxGeometry(w, 0.6, d), wallMat)).position.set(x, 0.3, z);
+  });
+  // Bloecke
+  MAP.blocks.forEach(b => {
+    const low = b.h < 1;
+    let m;
+    if (b.kind === 'lantern') {
+      m = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.BoxGeometry(b.hw * 2, 0.5, b.hd * 2), mat(0x8d8f9e)); base.position.y = 0.25;
+      const post = new THREE.Mesh(new THREE.BoxGeometry(b.hw, 0.6, b.hd), mat(0x9a9cab)); post.position.y = 0.8;
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(b.hw * 1.7, 0.35, b.hd * 1.7), mat(0xffe9a8, 0xffb347, 0.9)); lamp.position.y = 1.25;
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(b.hw * 1.6, 0.35, 4), mat(0x6b6d7a)); roof.position.y = 1.58; roof.rotation.y = Math.PI / 4;
+      m.add(base, post, lamp, roof); m.position.set(b.x, 0, b.z);
+    } else {
+      const tex = low ? TEX.box : TEX.stone.clone();
+      if (!low) { tex.needsUpdate = true; tex.repeat.set(b.hw * 1.6, b.h * 0.8); }
+      m = new THREE.Mesh(new THREE.BoxGeometry(b.hw * 2, b.h, b.hd * 2), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
+      m.position.set(b.x, b.h / 2, b.z);
+    }
+    add(m);
+  });
+  // Flipper-Pilze
+  MAP.circles.forEach(c => {
+    const g = new THREE.Group();
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(c.r * 0.85, c.r * 0.95, c.h - 0.3, 20), mat(0xffffff));
+    stem.position.y = (c.h - 0.3) / 2;
+    const capM = mat(0xff3d7f, 0xff3d7f, 0.35);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(c.r * 1.1, c.r, 0.3, 24), capM); cap.position.y = c.h - 0.15;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(c.r * 0.95, 0.06, 8, 24), mat(0xffe14a, 0xffe14a, 0.5)); ring.rotation.x = Math.PI / 2; ring.position.y = 1.1;
+    g.add(stem, cap, ring); g.position.set(c.x, 0, c.z); add(g);
+    bumpers.push({ g, capM, c, flash: 0 });
+  });
+  // Hohes Gras
+  const tuftGeo = new THREE.ConeGeometry(0.2, 1.35, 5); tuftGeo.translate(0, 0.675, 0);
+  const tuftMats = [mat(0x3f9a3a), mat(0x4fae42), mat(0x58b84a)];
+  MAP.bushes.forEach(b => {
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const x = b.x - 0.75 + i * 0.5 + rand(-0.1, 0.1), z = b.z - 0.75 + j * 0.5 + rand(-0.1, 0.1);
+      const m = add(new THREE.Mesh(tuftGeo, tuftMats[(i + j) % 3])); m.position.set(x, 0, z); m.rotation.y = Math.random() * 6;
+      tufts.push({ m, x, z, cut: false });
+    }
+  });
+  // Bambus
+  const stalkGeo = new THREE.CylinderGeometry(0.05, 0.06, 2.4, 6); stalkGeo.translate(0, 1.2, 0);
+  const stalkM = [mat(0x7fbf3f), mat(0x9ad14f), mat(0x6aa836)];
+  MAP.bamboo.forEach(b => {
+    for (let k = 0; k < 11; k++) {
+      const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 0.8, x = b.x + Math.cos(a) * r, z = b.z + Math.sin(a) * r;
+      const m = add(new THREE.Mesh(stalkGeo, stalkM[k % 3])); m.position.set(x, 0, z); m.scale.y = rand(0.8, 1.15);
+      bamboos.push({ m, x, z, cut: false, sy: m.scale.y });
+    }
+  });
+  // Rotor
+  if (MAP.rotor) {
+    const R = MAP.rotor, g = new THREE.Group();
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(R.len, R.h, R.w), new THREE.MeshStandardMaterial({ map: TEX.stone, roughness: 0.8 })); bar.position.y = R.h / 2;
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(R.len + 0.02, 0.14, R.w + 0.02), mat(0xffc93c, 0xffa000, 0.6)); stripe.position.y = R.h - 0.2;
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, R.h + 0.3, 16), mat(0x8a6a4a)); hub.position.y = (R.h + 0.3) / 2;
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), mat(0x37e0c0, 0x37e0c0, 0.9)); gem.position.y = R.h + 0.6;
+    g.add(bar, stripe, hub, gem); add(g); rotorMesh = g;
+  }
+  // Portale
+  (MAP.portals || []).forEach((pair, pi) => pair.forEach(pt => {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.09, 10, 32), mat(PORTAL_COLORS[pi], PORTAL_COLORS[pi], 0.9));
+    ring.position.y = 1.15;
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.7, 32), new THREE.MeshBasicMaterial({ color: PORTAL_COLORS[pi], transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
+    disc.position.y = 1.15;
+    const pad = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.6, 32), new THREE.MeshBasicMaterial({ color: PORTAL_COLORS[pi] })); pad.rotation.x = -Math.PI / 2; pad.position.y = 0.012;
+    g.add(ring, disc, pad); g.position.set(pt.x, 0, pt.z); g.rotation.y = Math.PI / 2; add(g);
+    portalMeshes.push({ g, disc });
+  }));
+  // Deko je Arena
+  if (id === 0) { // Torii-Tore hinter den Spawns
+    for (const z of [-A - 1.4, A + 1.4]) {
+      const red = mat(0xd8332b);
+      for (const x of [-1.6, 1.6]) { const p = add(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 3.2, 10), red)); p.position.set(x, 1.6, z); }
+      const top = add(new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.25, 0.35), mat(0x2b2b2b))); top.position.set(0, 3.25, z);
+      const beam = add(new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.18, 0.25), red)); beam.position.set(0, 2.75, z);
+    }
+  } else if (id === 1) { // bunte Lichtsaeulen
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2, x = Math.cos(a) * (A + 1.6), z = Math.sin(a) * (A + 1.6);
+      const col = [0xff5fb0, 0x37e0c0, 0xffe14a][i % 3];
+      const p = add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.6, 8), mat(col, col, 0.8))); p.position.set(x, 1.3, z);
+      const b = add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), mat(0xffffff, col, 1))); b.position.set(x, 2.7, z);
+    }
+  } else if (id === 2) { // Tempelsaeulen
+    for (const [x, z] of [[-A - 1.2, -A - 1.2], [A + 1.2, -A - 1.2], [-A - 1.2, A + 1.2], [A + 1.2, A + 1.2]]) {
+      const p = add(new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 4, 12), new THREE.MeshStandardMaterial({ map: TEX.stone }))); p.position.set(x, 2, z);
+      const c = add(new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.3, 1.3), mat(0xd8c49a))); c.position.set(x, 4.1, z);
     }
   }
+}
+function applyMap(id) { if (id !== curMap) buildMap(id); regrowGrass(); }
+function rotorAngle() { return MAP.rotor ? (performance.now() / 1000 - roundT0) * MAP.rotor.speed : 0; }
+// Weltpunkt -> lokales Rotor-System (Balken liegt auf lokaler x-Achse)
+function rotorLocal(x, z, ang) { const c = Math.cos(ang), s = Math.sin(ang); return [x * c - z * s, x * s + z * c]; }
+function rotorWorld(lx, lz, ang) { const c = Math.cos(ang), s = Math.sin(ang); return [lx * c + lz * s, -lx * s + lz * c]; }
+function regrowGrass() {
+  for (const t of tufts) { t.cut = false; t.m.scale.set(1, 1, 1); }
+  for (const b of bamboos) { b.cut = false; b.m.scale.set(1, b.sy, 1); }
+}
+function cutGrassAt(p) {
+  if (p.y > 2.4) return;
+  if (p.y < 1.4) for (const t of tufts) {
+    if (t.cut) continue;
+    if (Math.abs(p.x - t.x) < 0.32 && Math.abs(p.z - t.z) < 0.32) { t.cut = true; t.m.scale.set(1.2, 0.1, 1.2); burst(tmp3.set(t.x, 0.5, t.z), 0x58b84a, 5, 2); }
+  }
+  for (const b of bamboos) {
+    if (b.cut) continue;
+    if (Math.abs(p.x - b.x) < 0.22 && Math.abs(p.z - b.z) < 0.22) { b.cut = true; b.m.scale.set(1, Math.min(b.sy, p.y / 2.4), 1); burst(tmp3.set(b.x, p.y, b.z), 0x9ad14f, 6, 3); sfx.chop(); }
+  }
+}
+// Portal-Check: gibt Ziel zurueck oder null
+function portalExit(x, z, rad) {
+  if (!MAP.portals) return null;
+  for (const pair of MAP.portals) for (let i = 0; i < 2; i++) {
+    const a = pair[i];
+    if (Math.hypot(x - a.x, z - a.z) < rad) return { from: a, to: pair[1 - i] };
+  }
+  return null;
 }
 
 // Kollision Kreis (xz) gegen Arena -> korrigierte Position
 function resolveCircle(x, z, r) {
   x = clamp(x, -A + r, A - r); z = clamp(z, -A + r, A - r);
-  for (const b of BLOCKS) {
+  for (const b of MAP.blocks) {
     const ex = b.hw + r, ez = b.hd + r;
     const dx = x - b.x, dz = z - b.z;
     if (Math.abs(dx) < ex && Math.abs(dz) < ez) {
@@ -230,24 +375,78 @@ function resolveCircle(x, z, r) {
       if (px < pz) x = b.x + Math.sign(dx || 1) * ex; else z = b.z + Math.sign(dz || 1) * ez;
     }
   }
+  for (const c of MAP.circles) {
+    const dx = x - c.x, dz = z - c.z, d = Math.hypot(dx, dz), m = c.r + r;
+    if (d < m) { const k = d > 1e-4 ? m / d : 0; x = c.x + (d > 1e-4 ? dx * k : m); z = c.z + dz * k; }
+  }
+  if (MAP.rotor) {
+    const R = MAP.rotor, ang = rotorAngle();
+    let [lx, lz] = rotorLocal(x, z, ang);
+    const ex = R.len / 2 + r, ez = R.w / 2 + r;
+    if (Math.abs(lx) < ex && Math.abs(lz) < ez) {
+      if (ex - Math.abs(lx) < ez - Math.abs(lz)) lx = Math.sign(lx || 1) * ex; else lz = Math.sign(lz || 1) * ez;
+      [x, z] = rotorWorld(lx, lz, ang);
+    }
+    const dh = Math.hypot(x, z), mh = 0.6 + r;   // Nabe
+    if (dh < mh) { const k = dh > 1e-4 ? mh / dh : 0; x = dh > 1e-4 ? x * k : mh; z = z * k; }
+  }
   return [x, z];
 }
-// Bumerang-Kollision: veraendert np und vel, gibt true bei Abprall
+// Bumerang-Kollision: veraendert np und vel. 0 = nichts, 1 = Abprall, 2 = Flipper-Pilz
+let lastBumper = -1;
 function collideBoom(np, vel) {
-  let bounced = false;
+  let res = 0;
   const lim = A - 0.1;
-  if (np.x < -lim || np.x > lim) { vel.x = -vel.x; np.x = clamp(np.x, -lim, lim); bounced = true; }
-  if (np.z < -lim || np.z > lim) { vel.z = -vel.z; np.z = clamp(np.z, -lim, lim); bounced = true; }
-  for (const k of BLOCKS) {
+  if (np.x < -lim || np.x > lim) { vel.x = -vel.x; np.x = clamp(np.x, -lim, lim); res = 1; }
+  if (np.z < -lim || np.z > lim) { vel.z = -vel.z; np.z = clamp(np.z, -lim, lim); res = 1; }
+  for (const k of MAP.blocks) {
     if (np.y > k.h + 0.05) continue;
     const ex = k.hw + 0.06, ez = k.hd + 0.06, dx = np.x - k.x, dz = np.z - k.z;
     if (Math.abs(dx) < ex && Math.abs(dz) < ez) {
       const px = ex - Math.abs(dx), pz = ez - Math.abs(dz);
       if (px < pz) { vel.x = -vel.x; np.x = k.x + Math.sign(dx || 1) * ex; } else { vel.z = -vel.z; np.z = k.z + Math.sign(dz || 1) * ez; }
-      bounced = true;
+      res = Math.max(res, 1);
     }
   }
-  return bounced;
+  MAP.circles.forEach((c, i) => {
+    if (np.y > c.h + 0.05) return;
+    const dx = np.x - c.x, dz = np.z - c.z, d = Math.hypot(dx, dz), m = c.r + 0.07;
+    if (d < m && d > 1e-4) {
+      const nx = dx / d, nz = dz / d, dot = vel.x * nx + vel.z * nz;
+      if (dot < 0) { vel.x -= 2 * dot * nx; vel.z -= 2 * dot * nz; }
+      np.x = c.x + nx * m; np.z = c.z + nz * m;
+      if (c.bumper) {
+        const sp = Math.hypot(vel.x, vel.z), ns = Math.min(26, sp * 1.3);
+        vel.x *= ns / sp; vel.z *= ns / sp; res = 2; lastBumper = i;
+      } else res = Math.max(res, 1);
+    }
+  });
+  if (MAP.rotor && np.y < MAP.rotor.h + 0.05) {
+    const R = MAP.rotor, ang = rotorAngle();
+    let [lx, lz] = rotorLocal(np.x, np.z, ang);
+    const ex = R.len / 2 + 0.06, ez = R.w / 2 + 0.06;
+    if (Math.abs(lx) < ex && Math.abs(lz) < ez) {
+      let [vx, vz] = rotorLocal(vel.x, vel.z, ang);
+      if (ex - Math.abs(lx) < ez - Math.abs(lz)) { lx = Math.sign(lx || 1) * ex; vx = -vx; } else { lz = Math.sign(lz || 1) * ez; vz = -vz; }
+      [np.x, np.z] = rotorWorld(lx, lz, ang); [vel.x, vel.z] = rotorWorld(vx, vz, ang);
+      res = Math.max(res, 1);
+    }
+  }
+  return res;
+}
+// Bumerang durch Portal schicken
+function boomPortal(b, dt) {
+  b.portalCd = (b.portalCd || 0) - dt;
+  if (b.portalCd > 0) return false;
+  const e = portalExit(b.pos.x, b.pos.z, 0.6); if (!e) return false;
+  const sp = Math.hypot(b.vel.x, b.vel.z) || 1;
+  b.pos.x = e.to.x + (b.vel.x / sp) * 0.75; b.pos.z = e.to.z + (b.vel.z / sp) * 0.75;
+  [b.pos.x, b.pos.z] = [clamp(b.pos.x, -A + 0.3, A - 0.3), clamp(b.pos.z, -A + 0.3, A - 0.3)];
+  // nach innen zeigen, falls Richtung in die Wand ginge
+  if (Math.abs(e.to.x) > A - 1.2 && Math.sign(b.vel.x) === Math.sign(e.to.x)) b.vel.x = -b.vel.x;
+  b.portalCd = 0.5; burst(tmp3.set(e.from.x, 1.15, e.from.z), 0xb36bff, 10, 3); burst(tmp3.set(e.to.x, 1.15, e.to.z), 0x37e0c0, 10, 3); sfx.portal();
+  if (b.phase === 'out') b.range += 4;
+  return true;
 }
 
 // =====================================================================
@@ -286,6 +485,9 @@ const sfx = {
   bounce: () => tone('triangle', 300, 200, 0.06, 0.15),
   shield: () => tone('sine', 400, 1200, 0.25, 0.2),
   teleport: () => { tone('sine', 200, 2000, 0.25, 0.2); noise(0.25, 'bandpass', 3000, 400, 0.2); },
+  boing: () => { tone('sine', 300, 900, 0.15, 0.3); tone('square', 600, 1500, 0.08, 0.08); },
+  chop: () => noise(0.08, 'highpass', 2500, 5000, 0.2),
+  portal: () => tone('sine', 1500, 300, 0.2, 0.18),
   splash: () => { noise(0.6, 'bandpass', 1500, 300, 0.5); tone('sine', 300, 120, 0.3, 0.2); },
   incoming: (v) => noise(0.35, 'bandpass', 3000, 700, 0.35 * v),
   win: () => [523, 659, 784, 1046, 784, 1046].forEach((f, i) => tone('square', f, f, 0.16, 0.1, i * 0.13)),
@@ -325,7 +527,8 @@ hud.renderOrder = 999; hud.position.set(0, 0.05, -1.3); camera.add(hud);
 let hudTimer = 0;
 function showHud(text, sub = '', color = '#fff', dur = 1.6) {
   const g = hudTex.g; g.clearRect(0, 0, 1024, 512); g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = 'bold 140px system-ui'; g.lineWidth = 14; g.strokeStyle = 'rgba(0,0,0,.65)';
+  let fs = 140; g.font = 'bold ' + fs + 'px system-ui'; while (g.measureText(text).width > 960 && fs > 60) { fs -= 8; g.font = 'bold ' + fs + 'px system-ui'; }
+  g.lineWidth = 14; g.strokeStyle = 'rgba(0,0,0,.65)';
   g.strokeText(text, 512, 220); g.fillStyle = color; g.fillText(text, 512, 220);
   if (sub) { g.font = 'bold 54px system-ui'; g.lineWidth = 10; g.strokeText(sub, 512, 360); g.fillStyle = '#fff'; g.fillText(sub, 512, 360); }
   hudTex.t.needsUpdate = true; hud.visible = true; hudTimer = dur;
@@ -402,7 +605,7 @@ let scoresArr = [0, 0];
 let alive = true, canMove = true, myPower = null, myShield = false;
 let pScore = 0, bScore = 0;
 let inXR = false;
-let drowned = false;
+let drowned = false, playerPortalCd = 0;
 const oppSlot = () => 1 - mySlot;
 
 // Haende
@@ -549,7 +752,7 @@ scene.add(bot.boom.mesh); bot.boom.mesh.visible = false;
 const BOT_SPOTS = [[0, 6.8], [-6.5, 6.5], [6.5, 6.5], [-6.5, -6.5], [6.5, -6.5], [0, -6.8], [-6.8, 0.0], [6.8, 0.0]];
 function botSpawn(myHead) {
   let best = null, bd = -1;
-  for (const s of BOT_SPOTS) { if (inPond(s[0], s[1], -0.6)) continue; const d = Math.hypot(s[0] - myHead.x, s[1] - myHead.z); if (d > bd) { bd = d; best = s; } }
+  for (const s of BOT_SPOTS) { const [rx, rz] = resolveCircle(s[0], s[1], 0.35); if (Math.hypot(rx - s[0], rz - s[1]) > 0.01) continue; const d = Math.hypot(s[0] - myHead.x, s[1] - myHead.z); if (d > bd) { bd = d; best = s; } }
   bot.pos.set(best[0], 0, best[1]); bot.alive = true; bot.boom.state = 'held'; bot.nextThrow = rand(1.5, 2.5); bot.av.g.visible = true;
 }
 // Sichtlinie (xz) frei von hohen Bloecken?
@@ -557,7 +760,9 @@ function lineFree(ax, az, bx, bz) {
   const n = Math.ceil(Math.hypot(bx - ax, bz - az) / 0.25);
   for (let i = 1; i < n; i++) {
     const x = ax + (bx - ax) * i / n, z = az + (bz - az) * i / n;
-    for (const k of BLOCKS) if (k.h > FLY_H && Math.abs(x - k.x) < k.hw + 0.15 && Math.abs(z - k.z) < k.hd + 0.15) return false;
+    for (const k of MAP.blocks) if (k.h > FLY_H && Math.abs(x - k.x) < k.hw + 0.15 && Math.abs(z - k.z) < k.hd + 0.15) return false;
+    for (const c of MAP.circles) if (Math.hypot(x - c.x, z - c.z) < c.r + 0.15) return false;
+    if (MAP.rotor) { const [lx, lz] = rotorLocal(x, z, rotorAngle()); if (Math.abs(lx) < MAP.rotor.len / 2 + 0.15 && Math.abs(lz) < MAP.rotor.w / 2 + 0.15) return false; }
   }
   return true;
 }
@@ -659,8 +864,10 @@ function updateBot(dt, myHead) {
         b.vel.lerp(d.normalize().multiplyScalar(BOOM_RETURN_SPEED * 0.85 + b.tBack * 5), Math.min(1, (5 + b.tBack * 4) * h));
       }
       const np = tmp3.copy(b.pos).addScaledVector(b.vel, h); np.y += (FLY_H - np.y) * Math.min(1, 8 * h); b.vel.y = 0;
-      if (b.tBack < 2 && collideBoom(np, b.vel)) sfx.bounce();
+      const cr = b.tBack < 2 ? collideBoom(np, b.vel) : 0;
+      if (cr === 2) { sfx.boing(); flashBumper(); if (b.phase === 'out') b.range += 3; } else if (cr === 1) sfx.bounce();
       b.pos.copy(np);
+      boomPortal(b, h);
       // trifft Spieler? (Ducken unter Flughoehe = Ausweichen)
       if (!b.hit && alive && Math.hypot(b.pos.x - myHead.x, b.pos.z - myHead.z) < HIT_RADIUS && b.pos.y < myHead.y + 0.05) { b.hit = true; practiceDeath('GETROFFEN!'); }
       // Parade mit eigenem Bumerang
@@ -740,7 +947,6 @@ function netSend(m) {
 }
 
 // ---------- Schiedsrichter (nur Host) ----------
-const CRATE_SPOTS = [[0, -1.7], [0, 1.7], [-6.6, -5], [6.6, 5], [6.6, -5], [-6.6, 5], [-1, -5.2], [1, 5.2], [-5.4, -2.6], [5.4, 2.6]];
 const POWERS = ['multi', 'explosive', 'shield', 'teleport'];
 class Referee {
   constructor() { this.present = [false, false]; this.P = [this.mk(), this.mk()]; this.phase = 'lobby'; this.round = 0; this.crates = {}; this.cid = 1; this.ct = null; this.pt = null; this.ft = null; }
@@ -756,19 +962,19 @@ class Referee {
     if (!(this.phase === 'fight' || this.phase === 'practice')) return;
     if (Object.keys(this.crates).length >= 2) return;
     const used = Object.values(this.crates).map(c => c.x + ',' + c.z);
-    const free = CRATE_SPOTS.filter(s => !used.includes(s[0] + ',' + s[1]));
+    const free = MAP.crates.filter(s => !used.includes(s[0] + ',' + s[1]));
     const s = free[Math.floor(Math.random() * free.length)], id = this.cid++;
     this.crates[id] = { x: s[0], z: s[1] };
     this.bc({ t: 'crate', id, x: s[0], z: s[1] });
   }
   clear() { clearTimeout(this.pt); clearTimeout(this.ft); }
-  startPractice() { this.clear(); this.phase = 'practice'; this.P.forEach(p => Object.assign(p, this.mk())); this.bc({ t: 'practice' }); this.startCrates(1500); }
-  startMatch() { this.clear(); this.round = 0; this.P.forEach(p => Object.assign(p, this.mk())); this.startRound(); }
+  startPractice() { this.clear(); this.phase = 'practice'; this.P.forEach(p => Object.assign(p, this.mk())); this.bc({ t: 'practice', map: mapPref === 'rot' ? Math.max(0, curMap) : +mapPref }); this.startCrates(1500); }
+  startMatch() { this.clear(); this.round = 0; this.mapBase = Math.floor(Math.random() * MAPS.length); this.P.forEach(p => Object.assign(p, this.mk())); this.startRound(); }
   startRound() {
     this.round++; this.phase = 'countdown';
     this.P.forEach(p => { p.alive = true; p.shield = false; p.power = null; });
     this.stopCrates();
-    this.bc({ t: 'round', round: this.round, scores: this.P.map(p => p.score) });
+    this.bc({ t: 'round', round: this.round, scores: this.P.map(p => p.score), map: mapPref === 'rot' ? (this.mapBase + this.round - 1) % MAPS.length : +mapPref });
     this.pt = setTimeout(() => { this.phase = 'fight'; this.bc({ t: 'fight' }); this.startCrates(3500); }, 3000);
   }
   endCheck() {
@@ -830,17 +1036,19 @@ function handle(m) {
     case 'full': setStatus('Raum ist voll (2 Spieler)'); break;
     case 'practice':
       mode = 'practice'; pScore = 0; bScore = 0; alive = true; canMove = true; myPower = null; myShield = false; drowned = false;
-      resetMyBooms(); regrowGrass();
+      applyMap(m.map || 0); roundT0 = performance.now() / 1000;
+      resetMyBooms(); placeAtSpawn();
       bot.alive = false; bot.respawn = 1.5;
       if (opp.av) opp.av.g.visible = false; opp.has = false; opp.inited = false;
       setStatus('Training gegen Bot · warte auf Spieler 2');
-      showHud('TRAINING', 'Bot: ' + BOT_LV[difficulty].label + ' · B/Y ändert', '#ffe14a', 2.5);
+      showHud('TRAINING', MAP.name + ' · Bot: ' + BOT_LV[difficulty].label, '#ffe14a', 2.5);
       break;
     case 'round':
       mode = 'match'; scoresArr = m.scores; alive = true; canMove = false; myPower = null; myShield = false; drowned = false;
-      clearCrates(); resetMyBooms(); placeAtSpawn(); regrowGrass();
+      applyMap(m.map || 0); roundT0 = performance.now() / 1000;
+      clearCrates(); resetMyBooms(); placeAtSpawn();
       opp.alive = true; opp.shield = false; if (opp.av) opp.av.shield.visible = false;
-      setStatus('Runde ' + m.round + ' · erster mit ' + WIN_SCORE + ' Punkten gewinnt');
+      setStatus('Runde ' + m.round + ' · ' + MAP.name + ' · erster mit ' + WIN_SCORE + ' gewinnt');
       countdown = 3; countdownT = 0; showHud('3', 'Du bist ' + NAMES[mySlot], CSS[mySlot], 1); sfx.beep(523);
       break;
     case 'fight':
@@ -923,6 +1131,7 @@ function applyRemoteState(m) {
     let rb = opp.booms.get(id);
     if (!rb) { rb = { mesh: makeBoomerangMesh(COLORS[oppSlot()]), shadow: makeShadow(), pos: V(), tgt: V(), fly: 0, pw: null, parryCd: 0, trailT: 0, warned: false }; scene.add(rb.mesh); opp.booms.set(id, rb); rb.pos.set(x, y, z); }
     rb.tgt.set(x, y, z); rb.fly = fly;
+    if (rb.pos.distanceTo(rb.tgt) > 3) rb.pos.copy(rb.tgt); // Portal-Sprung nicht durchziehen
     if (rb.pw !== pw) { rb.pw = pw; setBoomPowerLook(rb.mesh, pw || null); }
   }
   for (const [id, rb] of opp.booms) if (!seen.has(id)) { scene.remove(rb.mesh); scene.remove(rb.shadow); opp.booms.delete(id); }
@@ -1069,6 +1278,7 @@ function update(dt, t) {
     const btn = !!((gp.buttons[0] && gp.buttons[0].pressed) || (gp.buttons[1] && gp.buttons[1].pressed)); // Trigger oder Grip = packen
     const aBtn = !!(gp.buttons[4] && gp.buttons[4].pressed);  // A / X = Dash
     const bBtn = !!(gp.buttons[5] && gp.buttons[5].pressed);  // B / Y = Bot-Stufe
+    const sBtn = !!(gp.buttons[3] && gp.buttons[3].pressed);  // Stick druecken = Arena wechseln (Training)
     const ax = gp.axes[2] || 0, ay = gp.axes[3] || 0;
     if (name === 'left') { moveX = ax; moveY = ay; }
     else {
@@ -1092,6 +1302,8 @@ function update(dt, t) {
       doDash(d);
     }
     if (bBtn && !h.prevB && mode === 'practice') cycleDifficulty();
+    if (sBtn && !h.prevS && mode === 'practice' && isHost) cycleMap();
+    h.prevS = sBtn;
     h.prevBtn = btn; h.prevA = aBtn; h.prevB = bBtn;
   }
   if (!inXR) { moveX = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0); moveY = (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0); }
@@ -1111,14 +1323,23 @@ function update(dt, t) {
   rig.updateMatrixWorld(true);
   const myHead = camera.getWorldPosition(V());
 
-  // ---------- Wasser ----------
-  if (alive && !drowned && (mode === 'match' || mode === 'practice') && inPond(myHead.x, myHead.z, 0.15)) {
-    drowned = true;
-    if (mode === 'match') { if (canMove) sendHit(mySlot, 'water', myHead); else drowned = false; }
-    else { const s = myShield; myShield = false; practiceDeath('INS WASSER!'); if (s) myShield = false; doFlash(0x2f9be8); sfx.splash(); burst(tmp1.copy(myHead).setY(0.3), 0x2f9be8, 30, 4); }
+  // ---------- Arena-Gimmicks ----------
+  if (rotorMesh) rotorMesh.rotation.y = rotorAngle();
+  for (const bp of bumpers) { bp.flash = Math.max(0, bp.flash - dt); bp.capM.emissiveIntensity = 0.35 + bp.flash * 4; bp.g.scale.setScalar(1 + bp.flash * 0.4); }
+  for (const pm of portalMeshes) { pm.disc.material.opacity = 0.35 + Math.sin(t * 4) * 0.12; }
+  playerPortalCd -= dt;
+  if (alive && canMove && playerPortalCd <= 0) {
+    const e = portalExit(myHead.x, myHead.z, 0.55);
+    if (e) {
+      const cx2 = -Math.sign(e.to.x) * 1.1;
+      const [px, pz] = resolveCircle(e.to.x + cx2, e.to.z, 0.35);
+      rig.position.x += px - myHead.x; rig.position.z += pz - myHead.z; rig.updateMatrixWorld(true);
+      camera.getWorldPosition(myHead); playerPortalCd = 1.2; sfx.teleport(); doFlash(0xb36bff, 0.4);
+    }
   }
+  // Rotor schiebt Spieler weg (resolveCircle oben deckt es ab, hier nochmal nach Drehung)
 
-  updateBot(dt, myHead);
+  updateBot(dt, myHead);  updateBot(dt, myHead);
 
   // ---------- Gegner glaetten ----------
   if (opp.av && opp.has) {
@@ -1251,11 +1472,13 @@ function updateBoom(b, dt, myHead) {
     if (b.phase === 'out') { np.y += (b.vy || 0) * sdt; b.vy = (b.vy || 0) * Math.exp(-2 * sdt); }
     else { const hp = handPos(h, tmp3); if (Math.hypot(hp.x - np.x, hp.z - np.z) < 2.5) np.y += (clamp(hp.y, 0.4, FLY_MAX) - np.y) * Math.min(1, 8 * sdt); }
     np.y = clamp(np.y, FLY_MIN, FLY_MAX); b.vel.y = 0;
-    if (b.tBack < 2.0 && collideBoom(np, b.vel)) {
+    const cr = b.tBack < 2.0 ? collideBoom(np, b.vel) : 0;
+    if (cr) {
       if (myPower === 'explosive') { b.pos.copy(np); b.mesh.position.copy(np); explode(b); return; }
-      sfx.bounce();
+      if (cr === 2) { sfx.boing(); flashBumper(); if (b.phase === 'out') b.range += 3; } else sfx.bounce();
     }
     b.pos.copy(np);
+    boomPortal(b, sdt);
     if (!b.hit) {
       if (hitsOpp(b.pos)) { b.hit = true; if (myPower === 'explosive') { explode(b); return; } sendHit(oppSlot(), 'boomerang', b.pos); }
       else if (hitsBot(b.pos)) { if (myPower === 'explosive') { explode(b); return; } hitBot(); }
@@ -1270,11 +1493,19 @@ function updateBoom(b, dt, myHead) {
   b.trailT -= dt; if (b.trailT <= 0) { b.trailT = 0.02; addTrail(b.pos, b.mesh.userData.mat.color.getHex()); }
 }
 
+function flashBumper() { const bp = bumpers[lastBumper]; if (bp) bp.flash = 0.25; }
 function snapTurn(a) {
   camera.getWorldPosition(tmp1);
   rig.rotation.y += a; rig.updateMatrixWorld(true);
   camera.getWorldPosition(tmp2);
   rig.position.x += tmp1.x - tmp2.x; rig.position.z += tmp1.z - tmp2.z;
+}
+function cycleMap() {
+  const next = (curMap + 1) % MAPS.length;
+  applyMap(next); roundT0 = performance.now() / 1000;
+  clearCrates(); if (referee) referee.startCrates(800);
+  resetMyBooms(); placeAtSpawn(); bot.alive = false; bot.respawn = 1.2; bot.boom.state = 'held';
+  showHud(MAP.name, 'Stick drücken = nächste Arena', '#ffe14a', 2); sfx.beep(990);
 }
 function cycleDifficulty() {
   difficulty = LV_ORDER[(LV_ORDER.indexOf(difficulty) + 1) % 3];
@@ -1295,6 +1526,7 @@ addEventListener('keydown', e => {
     d.copy(tmp2).multiplyScalar(-my).add(tmp3.set(-tmp2.z, 0, tmp2.x).multiplyScalar(mx)); doDash(d);
   }
   if (e.code === 'KeyB' && mode === 'practice') cycleDifficulty();
+  if (e.code === 'KeyM' && mode === 'practice' && isHost) cycleMap();
   if (e.code === 'KeyE' && alive && canMove && slashCd <= 0) {
     camera.getWorldPosition(tmp1); camera.getWorldDirection(tmp2);
     const p = tmp1.addScaledVector(tmp2.setY(0).normalize(), 0.8).setY(1.1);
@@ -1328,6 +1560,13 @@ document.querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click'
   difficulty = b.dataset.diff; try { localStorage.setItem('bd_diff', difficulty); } catch (e) {} updateDiffButtons(); wristKey = '';
 }));
 updateDiffButtons();
+function updateMapButtons() { document.querySelectorAll('[data-map]').forEach(b => b.classList.toggle('on', b.dataset.map === mapPref)); }
+document.querySelectorAll('[data-map]').forEach(b => b.addEventListener('click', () => {
+  mapPref = b.dataset.map; try { localStorage.setItem('bd_map', mapPref); } catch (e) {} updateMapButtons();
+  applyMap(mapPref === 'rot' ? 0 : +mapPref);
+}));
+updateMapButtons();
+{ const ve = document.getElementById('ver'); if (ve) ve.textContent = 'Version ' + VERSION; }
 function startGame() {
   if (started) return; started = true;
   initAudio();
@@ -1355,6 +1594,7 @@ deskBtn.onclick = () => {
   deskHands.right.add(handMeshes.right);
 };
 
+applyMap(mapPref === 'rot' ? 0 : +mapPref);
 resetMyBooms(); drawBoard(); drawWrist();
 rig.position.set(SPAWNS[0].x, 0, SPAWNS[0].z); rig.rotation.y = SPAWNS[0].yaw;
 renderer.setAnimationLoop(() => {

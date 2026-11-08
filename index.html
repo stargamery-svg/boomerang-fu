@@ -29,9 +29,11 @@
 <body>
 <div id="lobby"><div class="card">
   <h1><span class="o">BUMERANG</span>-<span class="b">DUELL</span> VR</h1>
-  <p class="sub">1 gegen 1 · zwei Quests im selben WLAN</p>
+  <p class="sub">1 gegen 1 · zwei Quests im selben WLAN · <b id="ver" style="color:#ffe14a">Version ?</b></p>
   <label>Raum-Code (auf beiden Quests gleich)</label>
   <input id="room" value="1" maxlength="6" inputmode="numeric">
+  <label style="margin-top:16px">Arena (bestimmt der Host = wer zuerst drin ist)</label>
+  <div class="diff"><button data-map="rot">Wechselnd</button><button data-map="0">Bambus-Dojo</button><button data-map="1">Flipper-Garten</button><button data-map="2">Rotor-Tempel</button></div>
   <label style="margin-top:16px">Bot-Stärke fürs Training (allein im Raum)</label>
   <div class="diff"><button data-diff="leicht">Leicht</button><button data-diff="mittel">Mittel</button><button data-diff="schwer">Schwer</button></div>
   <button id="vrBtn" disabled>VR STARTEN</button>
@@ -43,12 +45,13 @@
     Bumerang fliegt: Knopf drücken = zurückholen · Mit Bumerang zuschlagen = Nahkampf<br>
     Fliegenden Bumerang mit deinem wegschlagen = <b>Parade</b> · Ducken weicht aus<br>
     Linker Stick laufen · Rechter Stick drehen · A/X Dash · B/Y Bot-Stärke<br>
-    <b>Achtung:</b> Teiche = raus! Im hohen Gras kann man sich verstecken.<br>
+    <b>Arenen:</b> Dojo – Bambus wird durchgeschnitten · Flipper – Pilze schleudern Bumerangs schneller zurück · Rotor – drehender Balken + Portale (auch für dich!)<br>
+    Training: Stick drücken = nächste Arena<br>
     <b>Bildschirm:</b> WASD · Maus · Klick werfen · Rechtsklick zurück · Shift Dash · E Schlag · B Bot
   </div>
 </div></div>
 <div id="deskHud"></div>
 <script src="./peerjs.min.js"></script>
-<script type="module" src="./game.js"></script>
+<script type="module" src="./game.js?v=5"></script>
 </body>
 </html>
